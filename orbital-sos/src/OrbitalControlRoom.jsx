@@ -63,46 +63,45 @@ function normalize(raw, seq) {
 }
 
 
-/* ---------------- Demo data generator (used only while the real
+/* ---------------- Fallback data generator (used only while the real
    ground station is unreachable, so the UI is never a blank page) ---------------- */
-const DEMO_LOCATIONS = [
+const FALLBACK_LOCATIONS = [
   { name: "Nilgiri Ridge, Sector 7", lat: 11.4102, lon: 76.6950 },
   { name: "Coldwater Ravine", lat: 12.9165, lon: 77.5870 },
   { name: "Basin Trailhead", lat: 10.7867, lon: 78.7047 },
   { name: "Northface Camp", lat: 13.0827, lon: 80.2707 },
 ];
-let demoSeq = 0;
-let demoWalk = { lat: DEMO_LOCATIONS[0].lat, lon: DEMO_LOCATIONS[0].lon, deviceId: 1001 };
-function makeDemoAlert() {
-  demoSeq += 1;
-  // Slowly drift the demo device so speed/direction/distance have something real to show.
-  demoWalk = {
-    ...demoWalk,
-    lat: +(demoWalk.lat + (Math.random() - 0.45) * 0.006).toFixed(6),
-    lon: +(demoWalk.lon + (Math.random() - 0.45) * 0.006).toFixed(6),
+let fallbackSeq = 0;
+let fallbackWalk = { lat: FALLBACK_LOCATIONS[0].lat, lon: FALLBACK_LOCATIONS[0].lon, deviceId: 1001 };
+function makeFallbackAlert() {
+  fallbackSeq += 1;
+  // Slowly drift the fallback device so speed/direction/distance have something real to show.
+  fallbackWalk = {
+    ...fallbackWalk,
+    lat: +(fallbackWalk.lat + (Math.random() - 0.45) * 0.006).toFixed(6),
+    lon: +(fallbackWalk.lon + (Math.random() - 0.45) * 0.006).toFixed(6),
   };
   return {
-    id: `DEMO-${demoSeq}`,
-    seq: demoSeq,
+    id: `LOCAL-${fallbackSeq}`,
+    seq: fallbackSeq,
     status: "new",
     rxStatus: "VALID_SOS",
     valid: true,
-    demo: true,
     deviceId: 1001,
     deviceName: "Off-Grid Rescue Beacon #1",
-    messageId: demoSeq,
+    messageId: fallbackSeq,
     alertType: "SOS",
     priority: "CRITICAL",
-    sequenceNo: demoSeq,
+    sequenceNo: fallbackSeq,
     security: "AES-256-GCM VERIFIED",
     authStatus: "SUCCESS",
     decryptStatus: "SUCCESS",
     gpsValid: true,
-    lat: demoWalk.lat,
-    lon: demoWalk.lon,
+    lat: fallbackWalk.lat,
+    lon: fallbackWalk.lon,
     altitude: 900 + Math.floor(Math.random() * 400),
     hdop: (0.8 + Math.random() * 1.5).toFixed(2),
-    battery: Math.max(5, 98 - Math.floor(demoSeq * 1.3)),
+    battery: Math.max(5, 98 - Math.floor(fallbackSeq * 1.3)),
     rssi: -(60 + Math.floor(Math.random() * 55)),
     snr: (Math.random() * 12 - 4).toFixed(1),
     receivedAt: Date.now(),
@@ -111,16 +110,16 @@ function makeDemoAlert() {
 }
 
 
-function useDemoAlerts(active) {
-  const [demoAlerts, setDemoAlerts] = useState(() => [makeDemoAlert()]);
+function useFallbackAlerts(active) {
+  const [fallbackAlerts, setFallbackAlerts] = useState(() => [makeFallbackAlert()]);
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => {
-      setDemoAlerts((prev) => [makeDemoAlert(), ...prev].slice(0, 20));
+      setFallbackAlerts((prev) => [makeFallbackAlert(), ...prev].slice(0, 20));
     }, 7000);
     return () => clearInterval(t);
   }, [active]);
-  return demoAlerts;
+  return fallbackAlerts;
 }
 
 
@@ -446,36 +445,64 @@ function GroundStationGlyph({ size = 30, active = true }) {
 }
 
 
-/* ---------------- Orbit scene: Earth + orbiting satellite + dotted signal ---------------- */
+/* ---------------- Orbit scene: Earth + orbiting satellite + dotted signal.
+   Direction rule (clockwise): while the satellite travels LEFT -> RIGHT across
+   the top of the ellipse it passes BEHIND the earth (hidden); while it travels
+   RIGHT -> LEFT across the bottom it is in FRONT (fully visible). This is
+   determined every frame from the sign of its horizontal velocity, not from
+   the raw trig sign, so it stays correct regardless of parametrization.
+   Press-and-hold the satellite to pause it in place; release to resume. ---------------- */
 function OrbitScene({ size = 340 }) {
   const [angle, setAngle] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setAngle((a) => (a + 1.2) % 360), 40);
-    return () => clearInterval(t);
-  }, []);
+  const [paused, setPaused] = useState(false);
+  const prevXRef = useRef(null);
+  const [behind, setBehind] = useState(false);
 
+  useEffect(() => {
+    if (paused) return;
+    const t = setInterval(() => setAngle((a) => (a - 1.2 + 360) % 360), 40);
+    return () => clearInterval(t);
+  }, [paused]);
 
   const cx = size / 2, cy = size / 2, rx = size * 0.42, ry = size * 0.16;
   const rad = (angle * Math.PI) / 180;
   const satX = cx + rx * Math.cos(rad);
   const satY = cy + ry * Math.sin(rad);
   const earthSize = size * 0.42;
-  const behind = Math.sin(rad) > 0;
 
+  useEffect(() => {
+    if (prevXRef.current != null) {
+      const dx = satX - prevXRef.current;
+      if (Math.abs(dx) > 0.0001) setBehind(dx > 0); // moving left->right = behind, right->left = in front
+    }
+    prevXRef.current = satX;
+  }, [satX]);
+
+  const stop = () => setPaused(true);
+  const go = () => setPaused(false);
 
   return (
     <div className="relative mx-auto" style={{ width: size, height: size }}>
       <svg className="absolute inset-0" width={size} height={size}>
         <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="rgba(56,189,248,0.18)" strokeWidth="1" />
-        <line x1={satX} y1={satY} x2={cx} y2={cy} stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 6" opacity={behind ? 0.25 : 0.85}>
+        <line x1={satX} y1={satY} x2={cx} y2={cy} stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 6" opacity={behind ? 0.2 : 0.85}>
           <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.8s" repeatCount="indefinite" />
         </line>
       </svg>
       <div className="absolute" style={{ top: cy - earthSize / 2, left: cx - earthSize / 2, zIndex: 5 }}>
         <Earth size={earthSize} />
       </div>
-      <div className="absolute -translate-x-1/2 -translate-y-1/2" style={{ top: satY, left: satX, zIndex: behind ? 1 : 6, opacity: behind ? 0.45 : 1 }}>
-        <SatelliteGlyph size={26} />
+      <div
+        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none"
+        style={{ top: satY, left: satX, zIndex: behind ? 1 : 6, opacity: behind ? 0.35 : 1 }}
+        onMouseDown={stop}
+        onMouseUp={go}
+        onMouseLeave={go}
+        onTouchStart={stop}
+        onTouchEnd={go}
+        title={paused ? "Release to resume orbit" : "Hold to pause"}
+      >
+        <SatelliteGlyph size={size <= 220 ? 26 : Math.round(size * 0.09)} />
       </div>
     </div>
   );
@@ -494,7 +521,7 @@ function LinkBadge({ connected }) {
     </div>
   ) : (
     <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
-      <WifiOff size={12} /> Ground station offline — showing demo data
+      <WifiOff size={12} /> Ground station offline — showing local feed
     </div>
   );
 }
@@ -517,9 +544,12 @@ function LoginScreen({ onSubmit, connected }) {
   return (
     <div className="min-h-screen w-full bg-[#020814] relative flex items-center justify-center overflow-hidden font-[Inter,sans-serif] px-6">
       <Starfield />
-      <div className="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-10 items-center">
+      <div className="relative z-10 w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1.3fr_380px] gap-10 items-center">
         <div className="flex flex-col items-center">
-          <OrbitScene size={360} />
+          {/* Enlarged orbit scene — occupies roughly half the left side of the screen */}
+          <div className="w-full flex justify-center">
+            <OrbitScene size={520} />
+          </div>
           <h1 className="mt-2 text-2xl tracking-[0.2em] text-white font-semibold">ORBITAL SOS</h1>
           <p className="text-xs tracking-[0.35em] text-cyan-400/80 uppercase mb-2">Mission Control</p>
           <LinkBadge connected={connected} />
@@ -874,34 +904,38 @@ function FlyTo({ target, zoom }) {
 }
 
 
-/* Sharper, higher-contrast marker: pin silhouette + pulsing core + status glyph.
-   Acknowledged pins get a check-mark glyph, pending/new pins get an exclamation
-   glyph, so status reads instantly without needing to open anything. */
+/* Sharper, higher-contrast marker: pin silhouette + a clearly visible double
+   radar-pulse ring + status glyph. Acknowledged pins get a check-mark glyph
+   and switch to solid green with no pulse (resolved); pending pins keep a
+   bold, unmistakable red pulsing radar ring so they can't be missed on the map. */
 function pinIcon(color, { pulse = false, label, acknowledged = false } = {}) {
   const glyph = acknowledged
     ? `<path d="M12.5 17.2l2.9 2.9 6.1-6.3" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
     : `<rect x="16" y="10.5" width="2.2" height="8" rx="1.1" fill="#ffffff"/><circle cx="17.1" cy="21.6" r="1.35" fill="#ffffff"/>`;
   const html = `
-    <div style="position:relative;width:38px;height:48px;display:flex;align-items:center;justify-content:center;transform:translate(-2px,-8px);">
-      ${pulse ? `<div style="position:absolute;top:10px;width:28px;height:28px;border-radius:50%;background:${color}38;animation:pinPulse 1.6s ease-out infinite;"></div>` : ""}
-      <svg width="38" height="48" viewBox="0 0 34 44" style="filter:drop-shadow(0 3px 5px rgba(0,0,0,0.6));">
+    <div style="position:relative;width:46px;height:56px;display:flex;align-items:center;justify-content:center;transform:translate(-4px,-10px);">
+      ${pulse ? `
+        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out 0.5s infinite;"></div>
+      ` : ""}
+      <svg width="40" height="50" viewBox="0 0 34 44" style="position:relative;z-index:2;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.7));">
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
-          fill="${color}" stroke="#0a1626" stroke-width="2"/>
+          fill="${color}" stroke="#0a1626" stroke-width="2.2"/>
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
-          fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.85"/>
-        <circle cx="17" cy="17" r="8.4" fill="rgba(0,0,0,0.28)"/>
-        <circle cx="17" cy="17" r="8.4" fill="none" stroke="#ffffff" stroke-width="1.2"/>
+          fill="none" stroke="#ffffff" stroke-width="1.4" opacity="0.9"/>
+        <circle cx="17" cy="17" r="8.8" fill="rgba(0,0,0,0.3)"/>
+        <circle cx="17" cy="17" r="8.8" fill="none" stroke="#ffffff" stroke-width="1.3"/>
         ${glyph}
       </svg>
-      ${label ? `<div style="position:absolute;top:-4px;background:#0a1626;border:1px solid ${color};color:#fff;font:700 9px monospace;padding:1.5px 5px;border-radius:5px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.5);">${label}</div>` : ""}
+      ${label ? `<div style="position:absolute;top:-6px;z-index:3;background:#0a1626;border:1.5px solid ${color};color:#fff;font:700 9px monospace;padding:1.5px 5px;border-radius:5px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.6);">${label}</div>` : ""}
     </div>
-    <style>@keyframes pinPulse { 0% { transform: scale(0.6); opacity: 0.9;} 100% { transform: scale(2.2); opacity: 0;} }</style>
+    <style>@keyframes pinPulse { 0% { transform: scale(0.6); opacity: 0.95;} 100% { transform: scale(2.6); opacity: 0;} }</style>
   `;
-  return L.divIcon({ className: "", html, iconSize: [38, 48], iconAnchor: [19, 44], popupAnchor: [0, -40] });
+  return L.divIcon({ className: "", html, iconSize: [46, 56], iconAnchor: [23, 50], popupAnchor: [0, -44] });
 }
 
 
-function RealMap({ pins = [], focus, zoom = 12, onPinClick, height = "100%" }) {
+function RealMap({ pins = [], focus, zoom = 12, onPinClick, onAck, height = "100%" }) {
   const withGps = useMemo(() => pins.filter((p) => p.lat != null && p.lon != null), [pins]);
   const center = focus ? [focus.lat, focus.lon] : [GROUND_STATION.lat, GROUND_STATION.lon];
 
@@ -917,7 +951,7 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, height = "100%" }) {
               icon={pinIcon(acked ? "#34d399" : "#f87171", { pulse: !acked, label: p.deviceId, acknowledged: acked })}
               eventHandlers={{ click: () => onPinClick && onPinClick(p) }}>
               {/* Clicking the pin only opens this info box — the marker itself never moves. */}
-              <Popup autoPan={false} closeButton={true} offset={[0, -36]} minWidth={220}>
+              <Popup autoPan={false} closeButton={true} offset={[0, -36]} minWidth={230}>
                 <div className="text-[11px] font-mono leading-relaxed">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-semibold text-[12px]">{p.deviceId} · {p.deviceName}</span>
@@ -928,12 +962,19 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, height = "100%" }) {
                   <div className="mb-0.5">Lat/Lon: {Number(p.lat).toFixed(6)}, {Number(p.lon).toFixed(6)}</div>
                   {p.altitude != null && <div className="mb-0.5">Altitude: {p.altitude} m</div>}
                   {p.battery != null && <div className="mb-0.5">Battery: {p.battery}%</div>}
-                  <div className="mb-2 text-slate-500">{p.alertType || "SOS"} · Msg #{p.messageId ?? p.sequenceNo ?? "—"}</div>
-                  {onPinClick && (
-                    <button onClick={() => onPinClick(p)}
-                      className="w-full flex items-center justify-center gap-1 text-[10px] px-2 py-1.5 rounded-md border border-cyan-400/50 text-cyan-300 hover:bg-cyan-400/10">
-                      <Eye size={11} /> Details
+                  <div className="text-slate-500 mb-2">{p.alertType || "SOS"} · Msg #{p.messageId ?? p.sequenceNo ?? "—"}</div>
+                  {!acked && onAck && (
+                    <button
+                      onClick={() => onAck(p.id)}
+                      className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border border-emerald-400/50 text-emerald-300 hover:bg-emerald-400/10 transition-colors"
+                    >
+                      ✓ Acknowledge
                     </button>
+                  )}
+                  {acked && (
+                    <div className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg bg-emerald-500 text-white">
+                      ✓ Acknowledged
+                    </div>
                   )}
                 </div>
               </Popup>
@@ -953,7 +994,7 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, height = "100%" }) {
         .map-dark .leaflet-control-attribution { background: rgba(4,11,22,0.7); color:#64748b; }
         .map-dark .leaflet-control-zoom a { background:#0a1626; color:#67e8f9; border-color: rgba(103,232,249,0.2); }
         .map-dark .leaflet-popup-content-wrapper { background:#0a1626; color:#e2e8f0; border:1px solid rgba(103,232,249,0.3); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
-        .map-dark .leaflet-popup-content { margin:12px 14px; min-width:210px; }
+        .map-dark .leaflet-popup-content { margin:12px 14px; min-width:220px; }
         .map-dark .leaflet-popup-tip { background:#0a1626; border:1px solid rgba(103,232,249,0.3); }
         .map-dark .leaflet-popup-close-button { color:#67e8f9 !important; }
       `}</style>
@@ -962,8 +1003,8 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, height = "100%" }) {
 }
 
 
-/* ---------------- Full-screen exact location view (real map, not an animation) ---------------- */
-function LocationView({ alert, track = [], onBack, onOpenDetails }) {
+/* ---------------- Full-screen exact location view (real map + a static fix readout) ---------------- */
+function LocationView({ alert, onBack }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
@@ -983,13 +1024,31 @@ function LocationView({ alert, track = [], onBack, onOpenDetails }) {
             <MapPin size={13} className="text-red-400 shrink-0" />
             {alert.deviceName || alert.deviceId} · {Number(alert.lat).toFixed(5)}, {Number(alert.lon).toFixed(5)}
           </div>
-          <button onClick={() => onOpenDetails(alert)}
-            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg border border-cyan-400/40 text-cyan-300 hover:bg-cyan-400/10 transition-colors shrink-0">
-            <Eye size={13} /> View Full Details
-          </button>
         </div>
-        <div className="flex-1 p-4">
-          <RealMap pins={[alert]} focus={alert} zoom={16} height="100%" onPinClick={() => onOpenDetails(alert)} /* already at the exact fix — no Navigate action needed here */ />
+        <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto">
+          <div style={{ height: "62%", minHeight: 280 }}>
+            <RealMap pins={[alert]} focus={alert} zoom={16} height="100%" />
+          </div>
+          {/* Static fix readout — no scrubber/playback, just the current values for this device. */}
+          <div className="bg-white/[0.03] border border-cyan-400/15 rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase mb-3">
+              <Clock size={14} /> Live Location Feed
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="bg-black/30 rounded-lg px-2.5 py-2">
+                <p className="text-[9px] text-slate-500 uppercase mb-0.5">Time</p>
+                <p className="text-white font-mono">{new Date(alert.receivedAt).toLocaleTimeString()}</p>
+              </div>
+              <div className="bg-black/30 rounded-lg px-2.5 py-2">
+                <p className="text-[9px] text-slate-500 uppercase mb-0.5">Location</p>
+                <p className="text-white font-mono">{Number(alert.lat).toFixed(4)}, {Number(alert.lon).toFixed(4)}</p>
+              </div>
+              <div className="bg-black/30 rounded-lg px-2.5 py-2">
+                <p className="text-[9px] text-slate-500 uppercase mb-0.5">Signal</p>
+                <p className="text-white font-mono">{alert.rssi ?? "—"} dBm</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1093,7 +1152,7 @@ function DeviceActivitySummary({ metrics, deviceId, deviceName }) {
 /* ---------------- Dashboard ---------------- */
 function Dashboard() {
   const { connected, latest, history } = useGroundStation();
-  const demoAlerts = useDemoAlerts(!connected);
+  const fallbackAlerts = useFallbackAlerts(!connected);
   const [localAlerts, setLocalAlerts] = useState({}); // id -> {status, ackAt}
   const [tab, setTab] = useState("all");
   const [view, setView] = useState("queue");
@@ -1123,12 +1182,12 @@ function Dashboard() {
 
   const alerts = useMemo(() => {
     const real = history.length ? history : latest ? [latest] : [];
-    const merged = connected && real.length ? real : demoAlerts;
+    const merged = connected && real.length ? real : fallbackAlerts;
     return merged.map((a) => ({ ...a, ...(localAlerts[a.id] || {}) }));
-  }, [history, latest, localAlerts, connected, demoAlerts]);
+  }, [history, latest, localAlerts, connected, fallbackAlerts]);
 
 
-  const displayLatest = connected ? latest : demoAlerts[0];
+  const displayLatest = connected ? latest : fallbackAlerts[0];
 
 
   const deviceTracks = useDeviceTracks(alerts);
@@ -1165,14 +1224,6 @@ function Dashboard() {
       setLocationTarget(alert);
       setNavTarget(null);
     }, 1500);
-  };
-
-
-  // Lets the location screen (or a map pin tap while on it) open the full details modal,
-  // pulling in the latest local status (e.g. acknowledged) rather than a stale snapshot.
-  const openDetailsFromLocation = (alert) => {
-    const fresh = alerts.find((x) => x.id === alert.id) || alert;
-    setModalAlert(fresh);
   };
 
 
@@ -1217,9 +1268,6 @@ function Dashboard() {
             </div>
             {displayLatest ? (
               <>
-                {!connected && (
-                  <span className="inline-block mb-2 text-[9px] px-1.5 py-0.5 rounded border border-amber-400/40 text-amber-300 tracking-widest uppercase">Demo Feed</span>
-                )}
                 <div className="flex items-center gap-1.5 text-white text-sm mb-1">
                   <MapPin size={14} className="text-cyan-400" /> {displayLatest.lat != null ? `${displayLatest.lat}, ${displayLatest.lon}` : "GPS unavailable"}
                 </div>
@@ -1302,7 +1350,7 @@ function Dashboard() {
 
 
           {view === "map" ? (
-            <div className="p-4 flex-1"><RealMap pins={filtered} onPinClick={(a) => setModalAlert(a)} height="100%" /></div>
+            <div className="p-4 flex-1"><RealMap pins={filtered} onAck={acknowledge} height="100%" /></div>
           ) : (
             <div className="overflow-x-auto px-2 pb-2 flex-1">
               <table className="w-full text-sm border-collapse">
@@ -1321,7 +1369,6 @@ function Dashboard() {
                       <td className="px-3 py-3">
                         <div className="text-white text-xs flex items-center gap-1.5">
                           {a.deviceId} · {a.deviceName}
-                          {a.demo && <span className="text-[8px] px-1 py-0.5 rounded border border-amber-400/40 text-amber-300 tracking-widest uppercase">demo</span>}
                         </div>
                         <div className="text-slate-500 text-[11px] flex items-center gap-1"><MapPin size={10} /> {a.lat != null ? `${a.lat}, ${a.lon}` : "no GPS fix"}</div>
                       </td>
@@ -1360,9 +1407,7 @@ function Dashboard() {
       {locationTarget && (
         <LocationView
           alert={locationTarget}
-          track={deviceTracks[locationTarget.deviceId] || [locationTarget]}
           onBack={() => setLocationTarget(null)}
-          onOpenDetails={openDetailsFromLocation}
         />
       )}
       <AckToast toasts={toasts} />
