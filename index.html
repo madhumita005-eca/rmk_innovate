@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Off-Grid SOS — Control Room</title>
+<style>
+  :root{
+    --bg: #050810;
+    --panel: #0a1024;
+    --panel-2: #0d1530;
+    --line: #1c2b52;
+    --blue: #3fa9ff;
+    --blue-bright: #6fd6ff;
+    --blue-dim: #1c4f80;
+    --amber: #ffb84f;
+    --red: #ff5c6c;
+    --text: #d6e6ff;
+    --text-dim: #6d84b8;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--bg); font-family:var(--sans); color:var(--text); overflow:hidden;}
+  ::selection{background:var(--blue); color:#000;}
+
+  .stars{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1.5px 1.5px at 70% 60%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1.5px 1.5px at 90% 20%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 55% 45%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1.5px 1.5px at 10% 65%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 85% 85%, rgba(255,255,255,.3), transparent);
+    background-repeat:repeat; background-size: 600px 600px;
+  }
+  .crt{
+    position:fixed; inset:0; pointer-events:none; z-index:50; opacity:.04;
+    background: repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px);
+    mix-blend-mode: overlay;
+  }
+
+  /* =================== LOGIN =================== */
+  #login{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 50% 30%, rgba(63,169,255,.12), transparent 60%), var(--bg);
+    z-index:100; transition: opacity .6s ease, filter .6s ease;
+  }
+  #login.hide{ opacity:0; filter:blur(6px); pointer-events:none; }
+  .login-card{
+    width: 380px; padding: 40px 36px 34px;
+    background: var(--panel); border:1px solid var(--line); position:relative; z-index:2;
+    box-shadow: 0 0 60px rgba(63,169,255,.08);
+  }
+  .login-card::before{
+    content:""; position:absolute; top:-1px; left:-1px; right:-1px; height:2px;
+    background:linear-gradient(90deg, transparent, var(--blue-bright), transparent);
+    background-size:200% 100%; animation: sweep 2.5s linear infinite;
+  }
+  @keyframes sweep{ 0%{background-position-x:0%} 100%{background-position-x:200%} }
+  .brand{ font-family:var(--mono); font-size:12.5px; letter-spacing:.18em; color:var(--blue-bright); }
+  .login-title{ font-size:22px; margin:18px 0 4px; font-weight:600; }
+  .login-sub{ font-size:12.5px; color:var(--text-dim); margin-bottom:26px; line-height:1.5;}
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:11px; color:var(--text-dim); margin-bottom:6px; font-family:var(--mono); }
+  .field input{
+    width:100%; background:#050810; border:1px solid var(--line); color:var(--text);
+    padding:11px 12px; font-family:var(--mono); font-size:13px; outline:none; transition:border-color .2s;
+  }
+  .field input:focus{ border-color: var(--blue); }
+  .login-btn{
+    width:100%; margin-top:10px; padding:12px; background:var(--blue); color:#04101f;
+    border:none; font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:.06em;
+    cursor:pointer; transition:filter .15s, box-shadow .15s;
+  }
+  .login-btn:hover{ filter:brightness(1.15); box-shadow:0 0 20px rgba(63,169,255,.4); }
+  .login-foot{ margin-top:18px; font-size:10.5px; color:var(--text-dim); font-family:var(--mono); display:flex; justify-content:space-between; }
+  .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--blue-bright); margin-right:5px; box-shadow:0 0 6px var(--blue-bright); }
+
+  /* orbit scene behind login */
+  .orbit-scene{ position:absolute; inset:0; overflow:hidden; z-index:1; }
+  .earth{
+    position:absolute; width:260px; height:260px; border-radius:50%; right:-90px; bottom:-110px;
+    background:
+      radial-gradient(circle at 32% 30%, rgba(120,200,255,.9), transparent 45%),
+      conic-gradient(from 90deg, #08325c, #0c4a82, #113f6e, #0a2a4d, #0f5590, #08325c);
+    box-shadow: 0 0 70px rgba(63,169,255,.35), inset -30px -20px 60px rgba(0,0,0,.6);
+    animation: spin 26s linear infinite;
+  }
+  .earth::after{
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background: radial-gradient(circle at 65% 70%, transparent 40%, rgba(3,8,16,.55) 75%);
+  }
+  @keyframes spin{ from{background-position-x:0} to{background-position-x:260px} }
+  .sat-orbit{
+    position:absolute; width:420px; height:420px; right:-160px; bottom:-190px;
+    border:1px dashed rgba(63,169,255,.25); border-radius:50%;
+    animation: orbit 14s linear infinite;
+  }
+  .sat{
+    position:absolute; top:-6px; left:50%; width:14px; height:14px; margin-left:-7px;
+    filter: drop-shadow(0 0 6px rgba(111,214,255,.8));
+  }
+  @keyframes orbit{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+
+  /* =================== DASHBOARD =================== */
+  #dash{ height:100vh; display:none; grid-template-rows: 62px 1fr; opacity:0; transition:opacity .5s ease; position:relative; z-index:1;}
+  #dash.show{ display:grid; opacity:1; }
+
+  header.topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 20px; border-bottom:1px solid var(--line); background:var(--panel);
+    position:relative; overflow:hidden;
+  }
+  .topbar-left{ display:flex; align-items:center; gap:12px; z-index:2; }
+  .mini-earth{
+    width:30px; height:30px; border-radius:50%; flex:none;
+    background: conic-gradient(from 90deg, #08325c, #0c4a82, #113f6e, #0a2a4d, #0f5590, #08325c);
+    box-shadow: 0 0 12px rgba(63,169,255,.5);
+    animation: spin 10s linear infinite;
+  }
+  .title-block .t1{ font-family:var(--mono); font-weight:700; letter-spacing:.1em; font-size:14px; color:var(--blue-bright); }
+  .title-block .t2{ font-family:var(--mono); font-size:10.5px; color:var(--text-dim); }
+  .topbar-right{ display:flex; align-items:center; gap:22px; font-family:var(--mono); font-size:11px; color:var(--text-dim); z-index:2; }
+  .status-live{ display:flex; align-items:center; gap:6px; color:var(--blue-bright); }
+  .pulse{ width:7px; height:7px; border-radius:50%; background:var(--blue-bright); box-shadow:0 0 8px var(--blue-bright); animation:pulse 1.4s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.25} }
+  #clock{ color:var(--text); }
+
+  .grid{
+    display:grid; grid-template-columns: 1.15fr 1fr; grid-template-rows: auto 1fr;
+    gap:14px; padding:14px; height:100%; overflow:hidden;
+  }
+  .panel{ background:var(--panel); border:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+    border-bottom:1px solid var(--line); font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--text-dim);
+  }
+  .panel-body{ padding:14px; overflow:auto; flex:1; }
+
+  .alert-zone{ grid-column:1; grid-row:1; }
+  .alert-card{
+    position:relative; border:1px solid var(--red); background:rgba(255,92,108,.08);
+    padding:14px 16px; display:flex; align-items:flex-start; gap:12px; cursor:pointer; transition:background .2s;
+  }
+  .alert-card:hover{ background:rgba(255,92,108,.15); }
+  .alert-card .flag{
+    width:9px; height:9px; border-radius:50%; background:var(--red); margin-top:5px; flex:none;
+    box-shadow:0 0 10px var(--red); animation:pulse 1s infinite;
+  }
+  .alert-card .a-title{ font-family:var(--mono); font-size:12px; color:var(--red); letter-spacing:.05em; margin-bottom:3px; }
+  .alert-card .a-loc{ font-size:14px; color:var(--text); font-weight:600; }
+  .alert-card .a-sub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; font-family:var(--mono); }
+  .alert-card .a-tap{ margin-left:auto; font-family:var(--mono); font-size:10.5px; color:var(--red); align-self:center; white-space:nowrap; }
+
+  .wave-zone{ grid-column:2; grid-row:1; }
+  canvas#wave{ width:100%; height:100%; display:block; }
+  .wave-meta{ display:flex; gap:18px; font-family:var(--mono); font-size:10.5px; color:var(--text-dim); }
+  .wave-meta b{ color:var(--blue-bright); }
+
+  .queue-zone{ grid-column:1; grid-row:2; }
+  .tabs{ display:flex; gap:2px; }
+  .tab{
+    font-family:var(--mono); font-size:10.5px; padding:5px 11px; color:var(--text-dim);
+    border:1px solid var(--line); background:#050810; cursor:pointer; letter-spacing:.05em;
+  }
+  .tab.active{ color:var(--blue-bright); border-color:var(--blue-dim); background:rgba(63,169,255,.1); }
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  thead th{
+    text-align:left; font-family:var(--mono); font-size:10px; color:var(--text-dim); letter-spacing:.06em;
+    padding:8px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel);
+  }
+  tbody td{ padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tbody tr:hover{ background:rgba(63,169,255,.05); }
+  .badge{ font-family:var(--mono); font-size:10px; padding:2px 7px; border:1px solid; display:inline-block; letter-spacing:.04em; }
+  .badge.new{ color:var(--red); border-color:var(--red); }
+  .badge.ack{ color:var(--blue-bright); border-color:var(--blue-dim); }
+  .rowbtn{
+    font-family:var(--mono); font-size:10px; padding:5px 9px; border:1px solid var(--line);
+    background:transparent; color:var(--text-dim); cursor:pointer; margin-right:6px;
+  }
+  .rowbtn:hover{ border-color:var(--blue); color:var(--blue-bright); }
+  .rowbtn.ackbtn{ border-color:var(--amber); color:var(--amber); }
+  .rowbtn.ackbtn:hover{ background:rgba(255,184,79,.1); }
+  .rowbtn.ackbtn:disabled{ opacity:.35; cursor:default; }
+
+  .log-zone{ grid-column:2; grid-row:2; }
+  .log-empty{ color:var(--text-dim); font-family:var(--mono); font-size:11.5px; padding:6px 0; }
+  .log-entry{ border-left:2px solid var(--blue-bright); padding:9px 12px; margin-bottom:8px; background:rgba(63,169,255,.06); }
+  .log-entry .l-title{ font-family:var(--mono); font-size:11.5px; color:var(--blue-bright); margin-bottom:3px; }
+  .log-entry .l-sub{ font-size:11.5px; color:var(--text); }
+  .log-entry .l-time{ font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-top:4px; }
+
+  #modalWrap{
+    position:fixed; inset:0; background:rgba(2,5,12,.78); backdrop-filter:blur(2px);
+    display:none; align-items:center; justify-content:center; z-index:80;
+  }
+  #modalWrap.show{ display:flex; }
+  .modal{
+    width:480px; max-width:92vw; max-height:80vh; overflow:auto;
+    background:var(--panel-2); border:1px solid var(--blue-dim); box-shadow:0 0 40px rgba(63,169,255,.12);
+  }
+  .modal-head{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .modal-head h3{ font-family:var(--mono); font-size:13px; color:var(--blue-bright); letter-spacing:.05em; font-weight:600; }
+  .modal-close{ background:none; border:1px solid var(--line); color:var(--text-dim); font-family:var(--mono); width:26px; height:26px; cursor:pointer; font-size:13px; }
+  .modal-close:hover{ border-color:var(--red); color:var(--red); }
+  .modal-body{ padding:16px 18px; }
+  pre.json{ font-family:var(--mono); font-size:11.5px; line-height:1.65; color:var(--text); background:#03060d; border:1px solid var(--line); padding:14px; overflow:auto; white-space:pre; }
+  .json .k{ color:var(--amber); }
+  .json .s{ color:var(--blue-bright); }
+  .json .n{ color:#8fd0ff; }
+  .modal-foot{ padding:12px 18px; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-track{ background:var(--bg); }
+  ::-webkit-scrollbar-thumb{ background:var(--line); }
+</style>
+</head>
+<body>
+
+<div class="stars"></div>
+<div class="crt"></div>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login">
+  <div class="orbit-scene">
+    <div class="earth"></div>
+    <div class="sat-orbit">
+      <svg class="sat" viewBox="0 0 24 24" fill="none">
+        <rect x="9" y="9" width="6" height="6" rx="1" fill="#6fd6ff"/>
+        <rect x="0" y="10.5" width="7" height="3" fill="#3fa9ff"/>
+        <rect x="17" y="10.5" width="7" height="3" fill="#3fa9ff"/>
+        <line x1="12" y1="3" x2="12" y2="9" stroke="#6fd6ff" stroke-width="1"/>
+      </svg>
+    </div>
+  </div>
+  <div class="login-card">
+    <div class="brand">OFF-GRID SOS <span style="color:var(--text-dim)">/// LORA TO SATELLITE</span></div>
+    <div class="login-title">Control room access</div>
+    <div class="login-sub">Emergency relay network — ground console.<br>Authenticate to open the live tracking board.</div>
+    <div class="field">
+      <label>OPERATOR ID</label>
+      <input id="userField" type="text" value="operator.chennai" />
+    </div>
+    <div class="field">
+      <label>PASSCODE</label>
+      <input id="passField" type="password" placeholder="••••••••" />
+    </div>
+    <button class="login-btn" onclick="doLogin()">ENTER CONSOLE</button>
+    <div class="login-foot">
+      <span><span class="dot"></span>Uplink nominal</span>
+      <span>rev 0.9.3</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div id="dash">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="mini-earth"></div>
+      <div class="title-block">
+        <div class="t1">OFF-GRID SOS</div>
+        <div class="t2">GROUND CONSOLE · LORA → SATELLITE RELAY</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-live"><span class="pulse"></span>RECEIVER LOCKED · 868 MHz</div>
+      <div id="clock">--:--:--</div>
+      <div style="color:var(--text)">operator.chennai</div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <div class="panel alert-zone">
+      <div class="panel-head"><span>INCOMING ALERT</span><span>LIVE</span></div>
+      <div class="panel-body" style="padding:14px;">
+        <div class="alert-card" onclick="openModal()">
+          <div class="flag"></div>
+          <div>
+            <div class="a-title">NEW ALERT RECEIVED</div>
+            <div class="a-loc">Location: 13.0067° N, 80.2206° E — Semmancheri, TN</div>
+            <div class="a-sub">DEVICE SOS_004 · packet 00:03 ago · signal -92 dBm</div>
+          </div>
+          <div class="a-tap">TAP FOR DETAILS →</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel wave-zone">
+      <div class="panel-head">
+        <span>INCOMING SIGNAL — RSSI WAVEFORM</span>
+        <div class="wave-meta"><span>RSSI <b>-92 dBm</b></span><span>SNR <b>4.1 dB</b></span><span>FREQ <b>868.10 MHz</b></span></div>
+      </div>
+      <canvas id="wave"></canvas>
+    </div>
+
+    <div class="panel queue-zone">
+      <div class="panel-head">
+        <span>ALERT QUEUE</span>
+        <div class="tabs">
+          <div class="tab active" data-tab="all" onclick="setTab('all')">ALL</div>
+          <div class="tab" data-tab="recent" onclick="setTab('recent')">RECENT</div>
+          <div class="tab" data-tab="ack" onclick="setTab('ack')">RESPONDED</div>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr><th>DEVICE</th><th>LOCATION</th><th>RECEIVED</th><th>STATUS</th><th>ACTION</th></tr></thead>
+          <tbody id="queueBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel log-zone">
+      <div class="panel-head"><span>DISPATCH LOG</span><span id="ackCount">0 acknowledged</span></div>
+      <div class="panel-body" id="logBody">
+        <div class="log-empty">No acknowledgements yet. Confirmed alerts will appear here.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== MODAL ===================== -->
+<div id="modalWrap">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">ALERT DETAIL — SOS_004</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body"><pre class="json" id="modalJson"></pre></div>
+    <div class="modal-foot">
+      <span id="modalTimer">Time since received: 00:00</span>
+      <button class="rowbtn ackbtn" onclick="ackFromModal()">ACKNOWLEDGE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function tickClock(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB'); }
+setInterval(tickClock, 1000); tickClock();
+
+function doLogin(){
+  document.getElementById('login').classList.add('hide');
+  setTimeout(()=>{ document.getElementById('dash').classList.add('show'); initWave(); }, 350);
+}
+
+function initWave(){
+  const canvas = document.getElementById('wave');
+  const ctx = canvas.getContext('2d');
+  function resize(){ canvas.width = canvas.clientWidth * devicePixelRatio; canvas.height = canvas.clientHeight * devicePixelRatio; }
+  resize(); window.addEventListener('resize', resize);
+  let t = 0;
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#050810'; ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle = 'rgba(63,169,255,.07)'; ctx.lineWidth=1;
+    for(let x=0;x<w;x+=w/24){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for(let y=0;y<h;y+=h/8){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    ctx.beginPath();
+    ctx.strokeStyle = '#3fa9ff'; ctx.lineWidth = 2 * devicePixelRatio;
+    ctx.shadowColor = '#6fd6ff'; ctx.shadowBlur = 10;
+    for(let x=0; x<w; x++){
+      const nx = x/w*40 + t;
+      const burst = (Math.sin(t*0.5) > 0.6) ? Math.random()*0.5 : 0;
+      const y = h/2 + Math.sin(nx)*h*0.15*Math.sin(t*0.3+1) + (Math.random()-0.5)*h*0.03 + burst*h*0.25*Math.sin(nx*3);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke(); ctx.shadowBlur = 0;
+    t += 0.05;
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+let alerts = [
+  {id:'SOS_004', lat:'13.0067° N', lon:'80.2206° E', place:'Semmancheri, TN', received:'00:03 ago', status:'new', rssi:-92, snr:4.1, ts: Date.now()-40000},
+  {id:'SOS_002', lat:'12.9716° N', lon:'80.1985° E', place:'Sholinganallur, TN', received:'04:12 ago', status:'ack', rssi:-88, snr:5.6, ts: Date.now()-420000, ackTime: Date.now()-90000},
+  {id:'SOS_001', lat:'13.0500° N', lon:'80.2121° E', place:'Perungudi, TN', received:'11:47 ago', status:'ack', rssi:-95, snr:3.2, ts: Date.now()-900000, ackTime: Date.now()-300000},
+  {id:'SOS_003', lat:'12.8996° N', lon:'80.2209° E', place:'Thoraipakkam, TN', received:'22:05 ago', status:'new', rssi:-90, snr:4.8, ts: Date.now()-1300000},
+];
+let activeTab = 'all';
+let openId = null;
+
+function statusBadge(s){ return s==='ack' ? '<span class="badge ack">ACKNOWLEDGED</span>' : '<span class="badge new">NEW</span>'; }
+
+function renderQueue(){
+  const body = document.getElementById('queueBody');
+  const filtered = alerts.filter(a=>{
+    if(activeTab==='all') return true;
+    if(activeTab==='recent') return a.status==='new';
+    if(activeTab==='ack') return a.status==='ack';
+  });
+  body.innerHTML = filtered.map(a=>`
+    <tr>
+      <td style="font-family:var(--mono)">${a.id}</td>
+      <td>${a.place}</td>
+      <td style="font-family:var(--mono); color:var(--text-dim)">${a.received}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td>
+        <button class="rowbtn" onclick="showDetails('${a.id}')">DETAILS</button>
+        <button class="rowbtn ackbtn" ${a.status==='ack'?'disabled':''} onclick="acknowledge('${a.id}')">${a.status==='ack'?'ACKED':'ACKNOWLEDGE'}</button>
+      </td>
+    </tr>
+  `).join('');
+}
+function setTab(t){
+  activeTab = t;
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active', el.dataset.tab===t));
+  renderQueue();
+}
+
+function renderLog(){
+  const acked = alerts.filter(a=>a.status==='ack').sort((a,b)=>b.ackTime-a.ackTime);
+  document.getElementById('ackCount').textContent = acked.length + ' acknowledged';
+  const body = document.getElementById('logBody');
+  if(!acked.length){ body.innerHTML = '<div class="log-empty">No acknowledgements yet. Confirmed alerts will appear here.</div>'; return; }
+  body.innerHTML = acked.map(a=>`
+    <div class="log-entry">
+      <div class="l-title">ACKNOWLEDGEMENT DONE — ${a.id}</div>
+      <div class="l-sub">Rescue team heading off to venue · ${a.place}</div>
+      <div class="l-time">Ack at ${new Date(a.ackTime).toLocaleTimeString('en-GB')} · response time ${Math.max(1,Math.round((a.ackTime-a.ts)/1000))}s after receipt</div>
+    </div>
+  `).join('');
+}
+
+function acknowledge(id){
+  const a = alerts.find(x=>x.id===id);
+  if(a && a.status!=='ack'){ a.status='ack'; a.ackTime = Date.now(); }
+  renderQueue(); renderLog();
+  if(openId===id) buildModal(id);
+}
+function ackFromModal(){ if(openId) acknowledge(openId); }
+
+function jsonHighlight(obj){
+  let s = JSON.stringify(obj, null, 2);
+  s = s.replace(/"(\w+)":/g, '<span class="k">"$1"</span>:');
+  s = s.replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>');
+  s = s.replace(/: (-?\d+(\.\d+)?)/g, ': <span class="n">$1</span>');
+  return s;
+}
+function buildModal(id){
+  const a = alerts.find(x=>x.id===id);
+  document.getElementById('modalTitle').textContent = 'ALERT DETAIL — ' + a.id;
+  const payload = {
+    device_id: a.id,
+    status: a.status,
+    location: { lat: a.lat, lon: a.lon, place: a.place },
+    link: { rssi_dbm: a.rssi, snr_db: a.snr, freq_mhz: 868.10, path: "SOS Device -> LoRa RF -> SDR -> Ground Script -> Dashboard" },
+    auth: { identification: "verified", authorized_device: true },
+    received_at: new Date(a.ts).toISOString(),
+    acknowledged_at: a.ackTime ? new Date(a.ackTime).toISOString() : null
+  };
+  document.getElementById('modalJson').innerHTML = jsonHighlight(payload);
+  updateModalTimer();
+}
+function showDetails(id){ openId = id; buildModal(id); document.getElementById('modalWrap').classList.add('show'); }
+function closeModal(){ document.getElementById('modalWrap').classList.remove('show'); openId = null; }
+function updateModalTimer(){
+  if(!openId) return;
+  const a = alerts.find(x=>x.id===openId);
+  const el = document.getElementById('modalTimer');
+  if(a.status==='ack'){
+    const secs = Math.max(1, Math.round((a.ackTime - a.ts)/1000));
+    el.textContent = `Response time (receipt → ack): ${secs}s`;
+  } else {
+    const secs = Math.round((Date.now() - a.ts)/1000);
+    el.textContent = `Time since received: ${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')} — awaiting acknowledgement`;
+  }
+}
+setInterval(updateModalTimer, 1000);
+function openModal(){ showDetails('SOS_004'); }
+
+renderQueue();
+renderLog();
+</script>
+
+</body>
+</html>
