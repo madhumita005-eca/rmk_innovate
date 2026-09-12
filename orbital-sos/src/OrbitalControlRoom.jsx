@@ -951,15 +951,26 @@ function AckToast({ toasts }) {
 }
 
 
-/* ---------------- Waveform / spectrum oscilloscope (amplitude trace + power spectrum) ---------------- */
-function Waveform({ active }) {
+/* ---------------- Waveform / RSSI panel (link-activity trace + a REAL RSSI trend) ----------------
+   NOTE ON WHAT'S REAL vs STYLISED, based on what the ground-station API actually exposes
+   (/api/latest, /api/alerts returning per-packet JSON with rssi_dbm/snr_db scalars — no
+   raw IQ samples or FFT bins are streamed to the frontend):
+     - "Link Activity" (left) has no real per-sample waveform to draw from, so it stays a
+       lightweight, clearly-labelled stylised burst indicator — it only animates while a
+       packet is actively being processed (`active`), it does not claim to be a captured
+       signal trace, and it carries no numeric axis that could be mistaken for real values.
+     - "RSSI Trend" (right) plots REAL telemetry: the actual `rssi_dbm` values reported for
+       the last several decoded packets, so it moves only when genuine data arrives. A true
+       spectrum/FFT view would need the RX pipeline (GNU Radio) to publish bin data over the
+       API — that's a backend change, not something the frontend can fabricate honestly.
+------------------------------------------------------------------------------------------- */
+function Waveform({ active, history = [] }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 140);
     return () => clearInterval(t);
   }, []);
 
-  // Amplitude vs time — bursty tone envelope, similar to the reference DTMF scope trace
   const timePoints = useMemo(() => {
     const N = 160;
     const pts = [];
@@ -973,25 +984,7 @@ function Waveform({ active }) {
     return pts;
   }, [tick, active]);
 
-  // Power spectrum — a few resonant peaks that drift slightly, echoing the reference plot
-  const spectrumBars = useMemo(() => {
-    const N = 64;
-    const peaks = [0.18, 0.32, 0.5, 0.74];
-    const bars = [];
-    for (let i = 0; i < N; i++) {
-      const x = i / N;
-      let v = -42;
-      peaks.forEach((p, idx) => {
-        const d = Math.abs(x - (p + Math.sin(tick * 0.08 + idx) * 0.01));
-        v += Math.max(0, 34 - d * 260) * (0.7 + 0.3 * Math.sin(tick * 0.15 + idx * 2));
-      });
-      v += (Math.random() - 0.5) * 3;
-      bars.push(Math.max(-46, Math.min(-2, v)));
-    }
-    return bars;
-  }, [tick]);
-
-  const w = 320, h = 60;
+  const w = 320, h = 44;
   const linePath = timePoints
     .map((v, i) => {
       const x = (i / (timePoints.length - 1)) * w;
@@ -1000,27 +993,53 @@ function Waveform({ active }) {
     })
     .join(" ");
 
+  // Real RSSI values only (drop nulls), oldest -> newest, capped to what we were given.
+  const pts = history.filter((p) => p && p.rssi != null);
+  const rssiMin = pts.length ? Math.min(...pts.map((p) => p.rssi)) : -120;
+  const rssiMax = pts.length ? Math.max(...pts.map((p) => p.rssi)) : -40;
+  const span = Math.max(1, rssiMax - rssiMin);
+  const hw = 320, hh = 44;
+  const rssiPath = pts.length > 1
+    ? pts
+        .map((p, i) => {
+          const x = (i / (pts.length - 1)) * hw;
+          const t = (p.rssi - rssiMin) / span;
+          const y = hh - t * (hh - 8) - 4;
+          return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(" ")
+    : "";
+
   return (
     <div className="flex flex-col gap-2">
       <div>
-        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1">Amplitude vs Time</p>
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-14">
+        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1">Link Activity <span className="text-slate-600 normal-case">(indicator, not a captured trace)</span></p>
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-11">
           <line x1="0" y1={h / 2} x2={w} y2={h / 2} stroke="rgba(103,232,249,0.12)" strokeWidth="1" />
           <path d={linePath} fill="none" stroke="#38d7ff" strokeWidth="1.3"
             style={{ filter: "drop-shadow(0 0 4px rgba(56,215,255,0.65))" }} />
         </svg>
       </div>
       <div>
-        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1">Power Spectrum</p>
-        <div className="flex items-end gap-[2px] h-10 w-full">
-          {spectrumBars.map((v, i) => {
-            const pct = ((v + 46) / 44) * 100; // -46dB..-2dB -> 0..100%
-            return (
-              <div key={i} className="flex-1 rounded-sm bg-gradient-to-t from-cyan-500/30 via-cyan-300 to-white transition-all duration-150 ease-out"
-                style={{ height: `${Math.max(3, pct)}%`, boxShadow: "0 0 5px rgba(56,215,255,0.5)" }} />
-            );
-          })}
-        </div>
+        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1 flex items-center justify-between">
+          <span>RSSI Trend · last {pts.length} pkt{pts.length === 1 ? "" : "s"} (real telemetry)</span>
+          {pts.length > 0 && <span className="text-slate-600 normal-case tracking-normal font-mono">{rssiMin}…{rssiMax} dBm</span>}
+        </p>
+        {pts.length > 1 ? (
+          <svg viewBox={`0 0 ${hw} ${hh}`} className="w-full h-11">
+            <line x1="0" y1={hh - 4} x2={hw} y2={hh - 4} stroke="rgba(103,232,249,0.12)" strokeWidth="1" />
+            <path d={rssiPath} fill="none" stroke="#38d7ff" strokeWidth="1.6"
+              style={{ filter: "drop-shadow(0 0 4px rgba(56,215,255,0.55))" }} />
+            {pts.map((p, i) => {
+              const x = (i / (pts.length - 1)) * hw;
+              const t = (p.rssi - rssiMin) / span;
+              const y = hh - t * (hh - 8) - 4;
+              return <circle key={i} cx={x} cy={y} r={2} fill="#67e8f9" />;
+            })}
+          </svg>
+        ) : (
+          <p className="text-[10px] text-slate-600 h-11 flex items-center">Waiting for enough packets to plot a real RSSI trend...</p>
+        )}
       </div>
     </div>
   );
@@ -1037,21 +1056,43 @@ function FlyTo({ target, zoom }) {
 }
 
 
+/* Battery-driven urgency, red-scale only (acknowledged pins turn green elsewhere and are
+   never affected by this). A fading beacon is more time-critical to reach, so lower
+   battery reads as a deeper, more saturated red with a stronger pulse — not a different
+   hue, just more intense along the same red scale so "red = pending SOS" stays consistent. */
+function batteryRedShade(battery) {
+  if (battery == null) return "#f87171";       // unknown battery — default (healthy-looking) red
+  if (battery <= 20) return "#b91c1c";          // critical — deep, saturated red
+  if (battery <= 50) return "#ef4444";          // low — mid red
+  return "#f87171";                             // healthy — lighter red
+}
+function batteryIntensity(battery) {
+  if (battery == null) return 1;
+  if (battery <= 20) return 1.35;               // bigger, brighter pulse ring
+  if (battery <= 50) return 1.15;
+  return 1;
+}
+
+
 /* Sharper, higher-contrast marker: pin silhouette + a clearly visible double
    radar-pulse ring + status glyph. Acknowledged pins get a check-mark glyph
    and switch to solid green with no pulse (resolved); pending pins keep a
-   bold, unmistakable red pulsing radar ring so they can't be missed on the map. */
-function pinIcon(color, { pulse = false, label, acknowledged = false } = {}) {
+   bold, unmistakable red pulsing radar ring so they can't be missed on the map —
+   and that ring's shade/size now scales with the device's reported battery. */
+function pinIcon(color, { pulse = false, label, acknowledged = false, intensity = 1 } = {}) {
   const glyph = acknowledged
     ? `<path d="M12.5 17.2l2.9 2.9 6.1-6.3" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
     : `<rect x="16" y="10.5" width="2.2" height="8" rx="1.1" fill="#ffffff"/><circle cx="17.1" cy="21.6" r="1.35" fill="#ffffff"/>`;
+  const ringSize = Math.round(30 * intensity);
+  const ringTop = Math.round(9 - (ringSize - 30) / 2);
+  const glowPx = Math.round(6 * intensity);
   const html = `
     <div style="position:relative;width:46px;height:56px;display:flex;align-items:center;justify-content:center;transform:translate(-4px,-10px);">
       ${pulse ? `
-        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out infinite;"></div>
-        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out 0.5s infinite;"></div>
+        <div style="position:absolute;top:${ringTop}px;width:${ringSize}px;height:${ringSize}px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;top:${ringTop}px;width:${ringSize}px;height:${ringSize}px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out 0.5s infinite;"></div>
       ` : ""}
-      <svg width="40" height="50" viewBox="0 0 34 44" style="position:relative;z-index:2;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.7));">
+      <svg width="40" height="50" viewBox="0 0 34 44" style="position:relative;z-index:2;filter:drop-shadow(0 3px ${glowPx}px rgba(0,0,0,0.7)) drop-shadow(0 0 ${glowPx}px ${color}aa);">
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
           fill="${color}" stroke="#0a1626" stroke-width="2.2"/>
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
@@ -1079,9 +1120,11 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, onAck, height = "100
         <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {withGps.map((p) => {
           const acked = p.status === "acknowledged";
+          const color = acked ? "#34d399" : batteryRedShade(p.battery);
+          const label = p.battery != null ? `${p.deviceId} · ${p.battery}%` : `${p.deviceId}`;
           return (
             <Marker key={p.id} position={[p.lat, p.lon]}
-              icon={pinIcon(acked ? "#34d399" : "#f87171", { pulse: !acked, label: p.deviceId, acknowledged: acked })}
+              icon={pinIcon(color, { pulse: !acked, label, acknowledged: acked, intensity: acked ? 1 : batteryIntensity(p.battery) })}
               eventHandlers={{ click: () => onPinClick && onPinClick(p) }}>
               {/* Clicking the pin only opens this info box — the marker itself never moves. */}
               <Popup autoPan={false} closeButton={true} offset={[0, -36]} minWidth={230}>
@@ -1094,7 +1137,7 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, onAck, height = "100
                   </div>
                   <div className="mb-0.5">Lat/Lon: {Number(p.lat).toFixed(6)}, {Number(p.lon).toFixed(6)}</div>
                   {p.altitude != null && <div className="mb-0.5">Altitude: {p.altitude} m</div>}
-                  {p.battery != null && <div className="mb-0.5">Battery: {p.battery}%</div>}
+                  {p.battery != null && <div className="mb-0.5">Battery: {p.battery}%{!acked && p.battery <= 20 ? " — critical, prioritize" : ""}</div>}
                   <div className="text-slate-500 mb-2">{p.alertType || "SOS"} · Msg #{p.messageId ?? p.sequenceNo ?? "—"}</div>
                   {!acked && onAck && (
                     <button
@@ -1364,6 +1407,15 @@ function Dashboard() {
   const activeMetrics = computeDeviceMetrics(activeTrack);
 
 
+  // Real RSSI history for the "Incoming Signal Strength" panel — the last several
+  // decoded packets (any device), oldest to newest, so the trend line moves only
+  // when genuine telemetry arrives.
+  const recentSignal = useMemo(
+    () => [...alerts].sort((a, b) => a.receivedAt - b.receivedAt).slice(-20),
+    [alerts]
+  );
+
+
   const filtered = useMemo(() => {
     if (tab === "recent") return alerts.filter((a) => a.status === "new");
     if (tab === "responded") return alerts.filter((a) => a.status !== "new");
@@ -1450,7 +1502,7 @@ function Dashboard() {
             <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase mb-3">
               <Signal size={14} /> Incoming Signal Strength
             </div>
-            <Waveform active={signalActive || !connected} />
+            <Waveform active={signalActive || !connected} history={recentSignal} />
             <div className="flex justify-between mt-2 text-[10px] text-slate-500 font-mono">
               <span>RSSI {displayLatest?.rssi ?? "--"} dBm</span>
               <span>SNR {displayLatest?.snr ?? "--"} dB</span>
