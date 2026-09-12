@@ -651,21 +651,6 @@ function LoginScreen({ onSubmit, connected }) {
 }
 
 
-/* ---------------- Glowing sun, anchor for the Earth's orbit ---------------- */
-function Sun({ size = 46 }) {
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <div className="absolute inset-0 rounded-full" style={{
-        background: "radial-gradient(circle at 35% 30%, #fff6d8 0%, #ffd257 30%, #ff9d2e 65%, #d5590f 100%)",
-        boxShadow: `0 0 ${size * 1.4}px ${size * 0.5}px rgba(255,170,60,0.45)`,
-      }} />
-      <div className="absolute -inset-3 rounded-full animate-[pulse_3s_ease-in-out_infinite]"
-        style={{ background: "radial-gradient(circle, rgba(255,180,80,0.25) 0%, transparent 70%)" }} />
-    </div>
-  );
-}
-
-
 /* ---------------- Ground station dish with scanning sweep ---------------- */
 function GroundStationGlyph({ size = 30, active = true }) {
   return (
@@ -688,10 +673,11 @@ function GroundStationGlyph({ size = 30, active = true }) {
 }
 
 
-/* ---------------- Uplink Transition: Sun + orbiting Earth (with its own
-   orbiting, realistically-occluded satellite) in a starfield full of
-   surrounding planets and shooting stars, while the device -> satellite ->
-   ground-station relay plays out below, ending on a confirmation beat. ---------------- */
+/* ---------------- Uplink Transition: a centered, HUD-style space scene —
+   radar sweep + targeting brackets around the orbiting Earth/satellite,
+   flanked by the device -> satellite -> ground-station relay, in a
+   starfield full of surrounding planets and shooting stars — ending on a
+   confirmation beat. ---------------- */
 function UplinkTransition({ onComplete }) {
   const steps = [
     "Acquiring GPS fix from field device...",
@@ -704,12 +690,13 @@ function UplinkTransition({ onComplete }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [zoom, setZoom] = useState(false);
   const done = stepIndex >= steps.length - 1;
+  const TICKS = 24;
 
 
   useEffect(() => {
     if (stepIndex >= steps.length - 1) {
-      const t = setTimeout(() => setZoom(true), 900);
-      const t2 = setTimeout(onComplete, 1550);
+      const t = setTimeout(() => setZoom(true), 950);
+      const t2 = setTimeout(onComplete, 1600);
       return () => { clearTimeout(t); clearTimeout(t2); };
     }
     const t = setTimeout(() => setStepIndex((i) => i + 1), 640);
@@ -718,69 +705,95 @@ function UplinkTransition({ onComplete }) {
 
 
   const progress = Math.min(100, Math.round((stepIndex / (steps.length - 1)) * 100));
+  const litTicks = Math.round((progress / 100) * TICKS);
 
 
   return (
     <div className="min-h-screen w-full bg-[#020814] relative overflow-hidden flex flex-col items-center justify-center">
       <Starfield extras />
 
-      {/* Sun + Earth orbiting it, satellite orbiting Earth — ambient space backdrop */}
-      <div className="absolute top-8 right-10 sm:right-24">
-        <Sun size={46} />
-      </div>
-      <div className="absolute top-[64px] right-[100px] sm:right-[216px] animate-[sunOrbit_18s_linear_infinite]" style={{ width: 1, height: 1 }}>
-        <div style={{ transform: "translate(-50%,-50%)" }}>
-          <OrbitScene size={150} />
-        </div>
-      </div>
+      {/* Faint targeting grid, for that HUD/mission-control feel */}
+      <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{
+        backgroundImage: "linear-gradient(rgba(103,232,249,1) 1px, transparent 1px), linear-gradient(90deg, rgba(103,232,249,1) 1px, transparent 1px)",
+        backgroundSize: "48px 48px",
+      }} />
 
-      <div className={`relative w-full max-w-3xl h-[380px] transition-all duration-700 ${zoom ? "scale-150 opacity-0" : "scale-100 opacity-100"}`}>
-        <div className="absolute bottom-4 right-8 flex flex-col items-center">
-          <GroundStationGlyph size={36} active={stepIndex >= 3} />
-          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Ground Station</span>
-        </div>
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center animate-[float_3s_ease-in-out_infinite]">
-          <SatelliteGlyph size={36} />
-          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Relay Satellite</span>
-        </div>
-        <div className="absolute bottom-0 left-0 w-40 h-40 overflow-hidden rounded-tr-full">
-          <div className="absolute -bottom-20 -left-20">
-            <Earth size={220} spin={false} breathe={false} />
+      <div className={`relative z-10 flex flex-col items-center transition-all duration-700 ${zoom ? "scale-125 opacity-0" : "scale-100 opacity-100"}`}>
+        {/* Relay row: field device -- (signal) -- hero orbit -- (signal) -- ground station */}
+        <div className="flex items-center justify-center gap-3 sm:gap-6">
+          <div className="flex flex-col items-center gap-2 w-16 sm:w-20 shrink-0">
+            <MapPin size={22} className="text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)]" />
+            <span className="text-[8px] sm:text-[9px] tracking-widest text-slate-500 uppercase text-center leading-tight">Field<br />Device</span>
           </div>
-          <div className="absolute bottom-8 left-8">
-            <MapPin size={16} className="text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)]" />
+
+          <SignalLink active={stepIndex >= 1} />
+
+          {/* Hero: radar sweep + targeting brackets around the orbiting Earth/satellite */}
+          <div className="relative shrink-0" style={{ width: 300, height: 300 }}>
+            <div className="absolute inset-0 rounded-full animate-spin" style={{
+              animationDuration: "3.2s",
+              background: "conic-gradient(from 0deg, transparent 0deg, rgba(56,215,255,0.28) 18deg, transparent 46deg)",
+            }} />
+            <div className="absolute inset-6 rounded-full border border-cyan-400/15" />
+            <div className="absolute inset-[38px] rounded-full border border-cyan-400/10" />
+            {/* Targeting-reticle corner brackets */}
+            {[
+              "top-0 left-0 border-t-2 border-l-2",
+              "top-0 right-0 border-t-2 border-r-2",
+              "bottom-0 left-0 border-b-2 border-l-2",
+              "bottom-0 right-0 border-b-2 border-r-2",
+            ].map((pos, i) => (
+              <div key={i} className={`absolute ${pos} w-6 h-6 border-cyan-300/50`} />
+            ))}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <OrbitScene size={230} />
+            </div>
+          </div>
+
+          <SignalLink active={stepIndex >= 3} />
+
+          <div className="flex flex-col items-center gap-2 w-16 sm:w-20 shrink-0">
+            <GroundStationGlyph size={30} active={stepIndex >= 3} />
+            <span className="text-[8px] sm:text-[9px] tracking-widest text-slate-500 uppercase text-center leading-tight">Ground<br />Station</span>
           </div>
         </div>
-        <span className="absolute bottom-2 left-2 text-[9px] tracking-widest text-slate-500 uppercase">Field Device</span>
 
-
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 380" preserveAspectRatio="none">
-          <line x1="90" y1="300" x2="350" y2="40" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 1 ? 0.8 : 0.15}>
-            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
-          </line>
-          <line x1="350" y1="40" x2="610" y2="330" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 3 ? 0.8 : 0.15}>
-            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
-          </line>
-        </svg>
-      </div>
-
-
-      <div className="w-80 text-center relative z-10 -mt-6">
-        <p className={`text-sm tracking-wide mb-4 h-5 transition-colors ${done ? "text-emerald-300 font-semibold tracking-[0.15em]" : "text-cyan-300"}`}>
-          {done && <Check size={14} className="inline mr-1.5 -mt-0.5" />}
-          {steps[stepIndex]}
-        </p>
-        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-          <div className={`h-full transition-all duration-500 ${done ? "bg-gradient-to-r from-emerald-500 to-emerald-300" : "bg-gradient-to-r from-cyan-500 to-cyan-300"}`}
-            style={{ width: `${progress}%`, boxShadow: done ? "0 0 10px rgba(52,211,153,0.7)" : "0 0 10px rgba(56,215,255,0.7)" }} />
+        {/* HUD status readout */}
+        <div className="w-80 sm:w-96 text-center mt-8">
+          <p className={`text-sm tracking-wide mb-4 h-5 font-mono transition-colors ${done ? "text-emerald-300 font-semibold tracking-[0.15em]" : "text-cyan-300"}`}>
+            {done && <Check size={14} className="inline mr-1.5 -mt-0.5" />}
+            {steps[stepIndex]}
+          </p>
+          <div className="flex gap-[3px] justify-center">
+            {Array.from({ length: TICKS }).map((_, i) => (
+              <div key={i} className={`h-3 w-2 rounded-[1px] transition-colors duration-300 ${i < litTicks ? (done ? "bg-emerald-400" : "bg-cyan-400") : "bg-white/10"}`}
+                style={i < litTicks ? { boxShadow: `0 0 6px ${done ? "rgba(52,211,153,0.8)" : "rgba(56,215,255,0.8)"}` } : undefined} />
+            ))}
+          </div>
+          <p className="mt-3 text-[10px] tracking-[0.3em] text-slate-500 uppercase font-mono">
+            {done ? "All Systems Nominal" : `SYS// ${progress}% Synced`}
+          </p>
         </div>
-        <p className="mt-3 text-[10px] tracking-[0.3em] text-slate-500 uppercase">{done ? "Standing By" : `${progress}% Synced`}</p>
       </div>
+
       <style>{`
         @keyframes float { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-6px);} }
-        @keyframes sunOrbit { from { transform: rotate(0deg) translateX(150px) rotate(0deg); } to { transform: rotate(360deg) translateX(150px) rotate(-360deg); } }
+        @keyframes signalFlow { from { background-position: 0 0; } to { background-position: 20px 0; } }
       `}</style>
     </div>
+  );
+}
+
+
+/* Animated flowing dashed link used in the relay row (device/ground-station <-> hero) */
+function SignalLink({ active }) {
+  return (
+    <div className="hidden sm:block h-px w-10 md:w-16 shrink-0" style={{
+      backgroundImage: `repeating-linear-gradient(90deg, ${active ? "#38d7ff" : "rgba(56,215,255,0.25)"} 0 6px, transparent 6px 14px)`,
+      backgroundSize: "20px 1px",
+      animation: active ? "signalFlow 0.6s linear infinite" : "none",
+      opacity: active ? 0.9 : 0.35,
+    }} />
   );
 }
 
