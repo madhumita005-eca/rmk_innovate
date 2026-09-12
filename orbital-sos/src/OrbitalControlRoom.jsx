@@ -651,6 +651,140 @@ function LoginScreen({ onSubmit, connected }) {
 }
 
 
+/* ---------------- Glowing sun, anchor for the Earth's orbit ---------------- */
+function Sun({ size = 46 }) {
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <div className="absolute inset-0 rounded-full" style={{
+        background: "radial-gradient(circle at 35% 30%, #fff6d8 0%, #ffd257 30%, #ff9d2e 65%, #d5590f 100%)",
+        boxShadow: `0 0 ${size * 1.4}px ${size * 0.5}px rgba(255,170,60,0.45)`,
+      }} />
+      <div className="absolute -inset-3 rounded-full animate-[pulse_3s_ease-in-out_infinite]"
+        style={{ background: "radial-gradient(circle, rgba(255,180,80,0.25) 0%, transparent 70%)" }} />
+    </div>
+  );
+}
+
+
+/* ---------------- Ground station dish with scanning sweep ---------------- */
+function GroundStationGlyph({ size = 30, active = true }) {
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 64 64" className="drop-shadow-[0_0_10px_rgba(103,232,249,0.7)]">
+        <path d="M32 8 A22 22 0 0 1 54 30" fill="none" stroke="#67e8f9" strokeWidth="2" opacity="0.35" />
+        <ellipse cx="32" cy="30" rx="16" ry="9" fill="#0a2540" stroke="#67e8f9" strokeWidth="1.4" transform="rotate(-25 32 30)" />
+        <circle cx="32" cy="30" r="2" fill="#38bdf8" />
+        <line x1="32" y1="30" x2="32" y2="48" stroke="#94a3b8" strokeWidth="2" />
+        <path d="M20 58 L32 48 L44 58" fill="none" stroke="#94a3b8" strokeWidth="2" />
+        {active && (
+          <circle cx="32" cy="30" r="3" fill="none" stroke="#38d7ff" strokeWidth="1.5">
+            <animate attributeName="r" values="3;18;3" dur="2.2s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.9;0;0.9" dur="2.2s" repeatCount="indefinite" />
+          </circle>
+        )}
+      </svg>
+    </div>
+  );
+}
+
+
+/* ---------------- Uplink Transition: Sun + orbiting Earth (with its own
+   orbiting, realistically-occluded satellite) in a starfield full of
+   surrounding planets and shooting stars, while the device -> satellite ->
+   ground-station relay plays out below, ending on a confirmation beat. ---------------- */
+function UplinkTransition({ onComplete }) {
+  const steps = [
+    "Acquiring GPS fix from field device...",
+    "Broadcasting LoRa packet — 868.10 MHz...",
+    "Relaying via satellite uplink...",
+    "Downlinking to ground station...",
+    "Decrypting AES-256-GCM payload...",
+    "The Rescue Team is On Board!",
+  ];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [zoom, setZoom] = useState(false);
+  const done = stepIndex >= steps.length - 1;
+
+
+  useEffect(() => {
+    if (stepIndex >= steps.length - 1) {
+      const t = setTimeout(() => setZoom(true), 900);
+      const t2 = setTimeout(onComplete, 1550);
+      return () => { clearTimeout(t); clearTimeout(t2); };
+    }
+    const t = setTimeout(() => setStepIndex((i) => i + 1), 640);
+    return () => clearTimeout(t);
+  }, [stepIndex]);
+
+
+  const progress = Math.min(100, Math.round((stepIndex / (steps.length - 1)) * 100));
+
+
+  return (
+    <div className="min-h-screen w-full bg-[#020814] relative overflow-hidden flex flex-col items-center justify-center">
+      <Starfield extras />
+
+      {/* Sun + Earth orbiting it, satellite orbiting Earth — ambient space backdrop */}
+      <div className="absolute top-8 right-10 sm:right-24">
+        <Sun size={46} />
+      </div>
+      <div className="absolute top-[64px] right-[100px] sm:right-[216px] animate-[sunOrbit_18s_linear_infinite]" style={{ width: 1, height: 1 }}>
+        <div style={{ transform: "translate(-50%,-50%)" }}>
+          <OrbitScene size={150} />
+        </div>
+      </div>
+
+      <div className={`relative w-full max-w-3xl h-[380px] transition-all duration-700 ${zoom ? "scale-150 opacity-0" : "scale-100 opacity-100"}`}>
+        <div className="absolute bottom-4 right-8 flex flex-col items-center">
+          <GroundStationGlyph size={36} active={stepIndex >= 3} />
+          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Ground Station</span>
+        </div>
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center animate-[float_3s_ease-in-out_infinite]">
+          <SatelliteGlyph size={36} />
+          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Relay Satellite</span>
+        </div>
+        <div className="absolute bottom-0 left-0 w-40 h-40 overflow-hidden rounded-tr-full">
+          <div className="absolute -bottom-20 -left-20">
+            <Earth size={220} spin={false} breathe={false} />
+          </div>
+          <div className="absolute bottom-8 left-8">
+            <MapPin size={16} className="text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)]" />
+          </div>
+        </div>
+        <span className="absolute bottom-2 left-2 text-[9px] tracking-widest text-slate-500 uppercase">Field Device</span>
+
+
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 380" preserveAspectRatio="none">
+          <line x1="90" y1="300" x2="350" y2="40" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 1 ? 0.8 : 0.15}>
+            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
+          </line>
+          <line x1="350" y1="40" x2="610" y2="330" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 3 ? 0.8 : 0.15}>
+            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
+          </line>
+        </svg>
+      </div>
+
+
+      <div className="w-80 text-center relative z-10 -mt-6">
+        <p className={`text-sm tracking-wide mb-4 h-5 transition-colors ${done ? "text-emerald-300 font-semibold tracking-[0.15em]" : "text-cyan-300"}`}>
+          {done && <Check size={14} className="inline mr-1.5 -mt-0.5" />}
+          {steps[stepIndex]}
+        </p>
+        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+          <div className={`h-full transition-all duration-500 ${done ? "bg-gradient-to-r from-emerald-500 to-emerald-300" : "bg-gradient-to-r from-cyan-500 to-cyan-300"}`}
+            style={{ width: `${progress}%`, boxShadow: done ? "0 0 10px rgba(52,211,153,0.7)" : "0 0 10px rgba(56,215,255,0.7)" }} />
+        </div>
+        <p className="mt-3 text-[10px] tracking-[0.3em] text-slate-500 uppercase">{done ? "Standing By" : `${progress}% Synced`}</p>
+      </div>
+      <style>{`
+        @keyframes float { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-6px);} }
+        @keyframes sunOrbit { from { transform: rotate(0deg) translateX(150px) rotate(0deg); } to { transform: rotate(360deg) translateX(150px) rotate(-360deg); } }
+      `}</style>
+    </div>
+  );
+}
+
+
 
 
 
@@ -1413,6 +1547,7 @@ function Dashboard() {
 export default function OrbitalControlRoom() {
   const [screen, setScreen] = useState("login");
   const { connected } = useGroundStation();
-  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("dashboard")} connected={connected} />;
+  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("transition")} connected={connected} />;
+  if (screen === "transition") return <UplinkTransition onComplete={() => setScreen("dashboard")} />;
   return <Dashboard />;
 }
