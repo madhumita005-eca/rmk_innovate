@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  Satellite, Radio, MapPin, ShieldCheck, AlertTriangle,
+  Radio, MapPin, ShieldCheck, AlertTriangle,
   X, Check, Clock, Globe2, Lock, User, Signal, ChevronRight,
   RadioTower, Eye, Users, Loader2, Map as MapIcon, List, ArrowLeft,
   WifiOff, BatteryMedium, Navigation, TrendingUp
@@ -1136,6 +1136,37 @@ function DeviceActivitySummary({ metrics, deviceId, deviceName }) {
 
 
 /* ---------------- Dashboard ---------------- */
+/* ---------------- Navigate-to-location transition overlay ----------------
+   Translucent full-screen popup shown for the ~1.5s between the user
+   clicking "View Location"/"Map" and the exact-location map appearing.
+   Reuses the orbit animation so the satellite pass feels like it's actively
+   relaying the fix down to the ground station, rather than a blank wait. ---------------- */
+function NavTransitionOverlay({ target }) {
+  if (!target) return null;
+  return (
+    <div className="fixed inset-0 z-[70] bg-[#020814]/75 backdrop-blur-md flex flex-col items-center justify-center animate-[fadeIn_0.25s_ease-out]">
+      <OrbitScene size={230} />
+      <div className="mt-2 w-72 text-center">
+        <div className="flex items-center justify-center gap-2 text-cyan-300 text-[11px] tracking-widest uppercase mb-1">
+          <Navigation size={12} className="animate-pulse" /> Navigating to location...
+        </div>
+        <p className="text-white text-sm font-mono">
+          {target.lat != null ? `${Number(target.lat).toFixed(5)}, ${Number(target.lon).toFixed(5)}` : "—"}
+        </p>
+        <p className="text-[10px] text-slate-500 mt-0.5">{target.deviceName || target.deviceId}</p>
+        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-3">
+          <div className="h-full bg-cyan-400" style={{ animation: "navProgress 1.5s linear forwards", boxShadow: "0 0 8px rgba(56,215,255,0.7)" }} />
+        </div>
+      </div>
+      <style>{`
+        @keyframes navProgress { from { width: 0%; } to { width: 100%; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+    </div>
+  );
+}
+
+
 function Dashboard() {
   const { connected, latest, history } = useGroundStation();
   const fallbackAlerts = useFallbackAlerts(!connected);
@@ -1280,31 +1311,6 @@ function Dashboard() {
           </div>
 
 
-          <div className="bg-white/[0.03] border border-cyan-400/15 rounded-2xl p-4 flex flex-col items-center">
-            <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase mb-2 self-start">
-              <Satellite size={14} /> Live Orbital Uplink
-            </div>
-            <OrbitScene size={170} />
-
-
-            {navTarget && (
-              <div className="mt-3 w-full text-center">
-                <div className="flex items-center justify-center gap-2 text-cyan-300 text-[11px] tracking-widest uppercase mb-1">
-                  <Navigation size={12} className="animate-pulse" /> Navigating to location...
-                </div>
-                <p className="text-white text-xs font-mono">
-                  {navTarget.lat != null ? `${Number(navTarget.lat).toFixed(5)}, ${Number(navTarget.lon).toFixed(5)}` : "—"}
-                </p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{navTarget.deviceName || navTarget.deviceId}</p>
-                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-2">
-                  <div className="h-full bg-cyan-400" style={{ animation: "navProgress 1.5s linear forwards", boxShadow: "0 0 8px rgba(56,215,255,0.7)" }} />
-                </div>
-              </div>
-            )}
-            <style>{`@keyframes navProgress { from { width: 0%; } to { width: 100%; } }`}</style>
-          </div>
-
-
           <div className="bg-white/[0.03] border border-cyan-400/15 rounded-2xl p-4 grid grid-cols-3 gap-2 text-center">
             <div><p className="text-lg text-white font-semibold">{counts.all}</p><p className="text-[10px] text-slate-500 tracking-wider uppercase">Total</p></div>
             <div><p className="text-lg text-cyan-300 font-semibold">{counts.recent}</p><p className="text-[10px] text-slate-500 tracking-wider uppercase">Pending</p></div>
@@ -1390,6 +1396,7 @@ function Dashboard() {
 
 
       {modalAlert && <DetailsModal alert={modalAlert} onClose={() => setModalAlert(null)} onAck={acknowledge} onViewLocation={viewLocation} />}
+      <NavTransitionOverlay target={navTarget} />
       {locationTarget && (
         <LocationView
           alert={locationTarget}
