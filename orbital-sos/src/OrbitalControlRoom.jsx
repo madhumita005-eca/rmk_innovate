@@ -346,8 +346,66 @@ function useSmartAlerts(alerts) {
 }
 
 
+/* ---------------- Small distant planet (Mars/Saturn-style), used as background dressing ---------------- */
+function DistantPlanet({ size = 60, top, left, hue = "#c96b4a", ringed = false, opacity = 0.85 }) {
+  return (
+    <div className="absolute pointer-events-none" style={{ top, left, width: size, height: size, opacity }}>
+      {ringed && (
+        <div className="absolute rounded-full border border-cyan-100/25"
+          style={{ width: size * 1.9, height: size * 0.55, top: size * 0.22, left: -size * 0.45, transform: "rotate(-18deg)", boxShadow: "0 0 8px rgba(226,232,240,0.15)" }} />
+      )}
+      <div className="absolute inset-0 rounded-full" style={{
+        background: `radial-gradient(circle at 32% 28%, ${hue}dd 0%, ${hue}99 35%, #1c0f0a 78%)`,
+        boxShadow: `0 0 ${size * 0.5}px ${hue}33`,
+      }} />
+      <div className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(120deg, transparent 40%, rgba(0,0,0,0.55) 90%)" }} />
+    </div>
+  );
+}
+
+
+/* ---------------- Shooting stars: fast diagonal streaks that fire occasionally ---------------- */
+function ShootingStars() {
+  const streaks = useMemo(
+    () => Array.from({ length: 5 }, (_, i) => ({
+      top: 5 + Math.random() * 55,
+      left: 10 + Math.random() * 70,
+      delay: i * 3.4 + Math.random() * 3,
+      duration: 1.6 + Math.random() * 1.2,
+      cycle: 9 + Math.random() * 6,
+      len: 90 + Math.random() * 70,
+    })),
+    []
+  );
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {streaks.map((s, i) => (
+        <div key={i} className="absolute rounded-full"
+          style={{
+            top: `${s.top}%`, left: `${s.left}%`, width: s.len, height: 1.6,
+            background: "linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0))",
+            filter: "drop-shadow(0 0 4px rgba(255,255,255,0.9))",
+            transformOrigin: "left center",
+            animation: `shoot ${s.duration}s ease-in ${s.cycle}s infinite`,
+            animationDelay: `${s.delay}s`,
+            opacity: 0,
+          }} />
+      ))}
+      <style>{`
+        @keyframes shoot {
+          0% { transform: rotate(215deg) translateX(0); opacity: 0; }
+          4% { opacity: 1; }
+          22% { transform: rotate(215deg) translateX(-260px); opacity: 0; }
+          100% { opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+
 /* ---------------- Starfield background ---------------- */
-function Starfield() {
+function Starfield({ extras = false }) {
   const stars = useMemo(
     () => Array.from({ length: 110 }, () => ({
       top: Math.random() * 100, left: Math.random() * 100,
@@ -361,6 +419,14 @@ function Starfield() {
         <div key={i} className="absolute rounded-full bg-white animate-pulse"
           style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, opacity: 0.55, animationDelay: `${s.delay}s`, animationDuration: "3.5s" }} />
       ))}
+      {extras && (
+        <>
+          {/* Nearby planets, glimpsed at the edges of frame like the reference shots — login screen only */}
+          <DistantPlanet size={70} top="8%" left="86%" hue="#c96b4a" opacity={0.55} />
+          <DistantPlanet size={130} top="68%" left="-6%" hue="#d7b98a" ringed opacity={0.4} />
+          <ShootingStars />
+        </>
+      )}
       <div className="absolute -top-32 -right-32 w-[520px] h-[520px] rounded-full bg-cyan-500/10 blur-[110px]" />
       <div className="absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full bg-blue-600/10 blur-[110px]" />
       <div className="absolute top-1/3 left-1/2 w-[300px] h-[300px] rounded-full bg-indigo-500/5 blur-[90px]" />
@@ -398,7 +464,7 @@ function Earth({ size = 180, spin = true, breathe = true }) {
 }
 
 
-/* ---------------- Realistic satellite (custom SVG with glinting panels) ---------------- */
+/* ---------------- Realistic satellite (custom SVG with glinting panels + blinking nav light) ---------------- */
 function SatelliteGlyph({ size = 30 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" className="drop-shadow-[0_0_10px_rgba(103,232,249,0.85)]">
@@ -410,53 +476,34 @@ function SatelliteGlyph({ size = 30 }) {
       </defs>
       <rect x="7" y="24" width="16" height="6" rx="1" fill="url(#panelGrad)" stroke="#67e8f9" strokeWidth="1.2" />
       <rect x="41" y="24" width="16" height="6" rx="1" fill="url(#panelGrad)" stroke="#67e8f9" strokeWidth="1.2" />
-      <line x1="9" y1="27" x2="21" y2="27" stroke="#bae6fd" strokeWidth="0.5" opacity="0.8" />
-      <line x1="43" y1="27" x2="55" y2="27" stroke="#bae6fd" strokeWidth="0.5" opacity="0.8" />
+      {[9, 12, 15, 18].map((x) => <line key={"l" + x} x1={x} y1="24.5" x2={x} y2="29.5" stroke="#0a2540" strokeWidth="0.5" opacity="0.7" />)}
+      {[43, 46, 49, 52, 55].map((x) => <line key={"r" + x} x1={x} y1="24.5" x2={x} y2="29.5" stroke="#0a2540" strokeWidth="0.5" opacity="0.7" />)}
       <rect x="23" y="21" width="18" height="12" rx="2" fill="#e2e8f0" stroke="#67e8f9" strokeWidth="1.2" />
       <circle cx="32" cy="27" r="2.2" fill="#38bdf8">
         <animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite" />
       </circle>
       <path d="M28 33 L26 40" stroke="#94a3b8" strokeWidth="1.2" />
       <circle cx="25" cy="42" r="4.5" fill="#cbd5e1" stroke="#67e8f9" strokeWidth="1" />
+      <path d="M24 21 L24 17" stroke="#94a3b8" strokeWidth="1" />
+      <circle cx="24" cy="16" r="1.4" fill="#f87171">
+        <animate attributeName="opacity" values="1;0.15;1" dur="1.1s" repeatCount="indefinite" />
+      </circle>
     </svg>
   );
 }
 
 
-/* ---------------- Ground station dish with scanning sweep ---------------- */
-function GroundStationGlyph({ size = 30, active = true }) {
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox="0 0 64 64" className="drop-shadow-[0_0_10px_rgba(103,232,249,0.7)]">
-        <path d="M32 8 A22 22 0 0 1 54 30" fill="none" stroke="#67e8f9" strokeWidth="2" opacity="0.35" />
-        <ellipse cx="32" cy="30" rx="16" ry="9" fill="#0a2540" stroke="#67e8f9" strokeWidth="1.4" transform="rotate(-25 32 30)" />
-        <circle cx="32" cy="30" r="2" fill="#38bdf8" />
-        <line x1="32" y1="30" x2="32" y2="48" stroke="#94a3b8" strokeWidth="2" />
-        <path d="M20 58 L32 48 L44 58" fill="none" stroke="#94a3b8" strokeWidth="2" />
-        {active && (
-          <circle cx="32" cy="30" r="3" fill="none" stroke="#38d7ff" strokeWidth="1.5">
-            <animate attributeName="r" values="3;18;3" dur="2.2s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.9;0;0.9" dur="2.2s" repeatCount="indefinite" />
-          </circle>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-
 /* ---------------- Orbit scene: Earth + orbiting satellite + dotted signal.
-   Direction rule (clockwise): while the satellite travels LEFT -> RIGHT across
-   the top of the ellipse it passes BEHIND the earth (hidden); while it travels
-   RIGHT -> LEFT across the bottom it is in FRONT (fully visible). This is
-   determined every frame from the sign of its horizontal velocity, not from
-   the raw trig sign, so it stays correct regardless of parametrization.
+   True front/back geometry, like looking at a tilted ring side-on: the
+   BOTTOM arc of the ellipse is the near side (in front of the planet, fully
+   visible, larger as it swings closer to the viewer) and the TOP arc is the
+   far side (behind the planet, completely hidden — not just faded). This is
+   read directly off the satellite's position each frame, not inferred from
+   its direction of travel, so front/back is always geometrically correct.
    Press-and-hold the satellite to pause it in place; release to resume. ---------------- */
-function OrbitScene({ size = 340 }) {
+function OrbitScene({ size = 340, extras = false }) {
   const [angle, setAngle] = useState(0);
   const [paused, setPaused] = useState(false);
-  const prevXRef = useRef(null);
-  const [behind, setBehind] = useState(false);
 
   useEffect(() => {
     if (paused) return;
@@ -470,22 +517,28 @@ function OrbitScene({ size = 340 }) {
   const satY = cy + ry * Math.sin(rad);
   const earthSize = size * 0.42;
 
-  useEffect(() => {
-    if (prevXRef.current != null) {
-      const dx = satX - prevXRef.current;
-      if (Math.abs(dx) > 0.0001) setBehind(dx > 0); // moving left->right = behind, right->left = in front
-    }
-    prevXRef.current = satX;
-  }, [satX]);
+  // depth: -1 at the far top (directly behind the planet) .. +1 at the near
+  // bottom (directly in front, closest to the viewer).
+  // >>> If the front/back side ever looks backwards, swap this one line: <<<
+  const depth = Math.sin(rad);
+  const scale = 0.78 + 0.34 * ((depth + 1) / 2); // smoothly bigger as it comes toward the front
+  // Fades out over the last ~10% of the depth range as it crosses the horizon,
+  // instead of vanishing/appearing instantly — that abrupt cut was the "flip".
+  const visibility = Math.max(0, Math.min(1, depth * 10));
+  const behind = visibility <= 0;
 
   const stop = () => setPaused(true);
   const go = () => setPaused(false);
 
   return (
-    <div className="relative mx-auto" style={{ width: size, height: size }}>
+    <div className="relative mx-auto overflow-visible" style={{ width: size, height: size }}>
+      {extras && <DistantPlanet size={size * 0.16} top={-size * 0.03} left={size * 0.86} hue="#c96b4a" opacity={0.6} />}
       <svg className="absolute inset-0" width={size} height={size}>
-        <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="rgba(56,189,248,0.18)" strokeWidth="1" />
-        <line x1={satX} y1={satY} x2={cx} y2={cy} stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 6" opacity={behind ? 0.2 : 0.85}>
+        {/* Far (back) half of the ring — dim, since the planet occludes it */}
+        <path d={`M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${cy}`} fill="none" stroke="rgba(56,189,248,0.10)" strokeWidth="1" />
+        {/* Near (front) half of the ring — brighter, unoccluded */}
+        <path d={`M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 0 ${cx + rx} ${cy}`} fill="none" stroke="rgba(56,189,248,0.3)" strokeWidth="1.2" />
+        <line x1={satX} y1={satY} x2={cx} y2={cy} stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 6" opacity={0.85 * visibility}>
           <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.8s" repeatCount="indefinite" />
         </line>
       </svg>
@@ -494,7 +547,11 @@ function OrbitScene({ size = 340 }) {
       </div>
       <div
         className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none"
-        style={{ top: satY, left: satX, zIndex: behind ? 1 : 6, opacity: behind ? 0.35 : 1 }}
+        style={{
+          top: satY, left: satX, zIndex: 6, opacity: visibility,
+          pointerEvents: behind ? "none" : "auto",
+          transform: `translate(-50%, -50%) scale(${scale})`,
+        }}
         onMouseDown={stop}
         onMouseUp={go}
         onMouseLeave={go}
@@ -543,12 +600,12 @@ function LoginScreen({ onSubmit, connected }) {
 
   return (
     <div className="min-h-screen w-full bg-[#020814] relative flex items-center justify-center overflow-hidden font-[Inter,sans-serif] px-6">
-      <Starfield />
+      <Starfield extras />
       <div className="relative z-10 w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1.3fr_380px] gap-10 items-center">
         <div className="flex flex-col items-center">
           {/* Enlarged orbit scene — occupies roughly half the left side of the screen */}
           <div className="w-full flex justify-center">
-            <OrbitScene size={520} />
+            <OrbitScene size={520} extras />
           </div>
           <h1 className="mt-2 text-2xl tracking-[0.2em] text-white font-semibold">ORBITAL SOS</h1>
           <p className="text-xs tracking-[0.35em] text-cyan-400/80 uppercase mb-2">Mission Control</p>
@@ -594,78 +651,7 @@ function LoginScreen({ onSubmit, connected }) {
 }
 
 
-/* ---------------- Uplink Transition: pin -> satellite -> ground station ---------------- */
-function UplinkTransition({ onComplete }) {
-  const steps = [
-    "Acquiring GPS fix from field device...",
-    "Broadcasting LoRa packet — 868.10 MHz...",
-    "Relaying via satellite uplink...",
-    "Downlinking to ground station...",
-    "Decrypting AES-256-GCM payload...",
-  ];
-  const [stepIndex, setStepIndex] = useState(0);
-  const [zoom, setZoom] = useState(false);
 
-
-  useEffect(() => {
-    if (stepIndex >= steps.length) {
-      setZoom(true);
-      const t = setTimeout(onComplete, 650);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setStepIndex((i) => i + 1), 640);
-    return () => clearTimeout(t);
-  }, [stepIndex]);
-
-
-  const progress = Math.min(100, Math.round((stepIndex / steps.length) * 100));
-
-
-  return (
-    <div className="min-h-screen w-full bg-[#020814] relative overflow-hidden flex flex-col items-center justify-center">
-      <Starfield />
-      <div className={`relative w-full max-w-3xl h-[380px] transition-all duration-700 ${zoom ? "scale-150 opacity-0" : "scale-100 opacity-100"}`}>
-        <div className="absolute bottom-4 right-8 flex flex-col items-center">
-          <GroundStationGlyph size={36} active={stepIndex >= 3} />
-          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Ground Station</span>
-        </div>
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center animate-[float_3s_ease-in-out_infinite]">
-          <SatelliteGlyph size={36} />
-          <span className="text-[9px] tracking-widest text-slate-500 uppercase mt-1">Relay Satellite</span>
-        </div>
-        <div className="absolute bottom-0 left-0 w-40 h-40 overflow-hidden rounded-tr-full">
-          <div className="absolute -bottom-20 -left-20">
-            <Earth size={220} spin={false} breathe={false} />
-          </div>
-          <div className="absolute bottom-8 left-8">
-            <MapPin size={16} className="text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)]" />
-          </div>
-        </div>
-        <span className="absolute bottom-2 left-2 text-[9px] tracking-widest text-slate-500 uppercase">Field Device</span>
-
-
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 380" preserveAspectRatio="none">
-          <line x1="90" y1="300" x2="350" y2="40" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 1 ? 0.8 : 0.15}>
-            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
-          </line>
-          <line x1="350" y1="40" x2="610" y2="330" stroke="#38d7ff" strokeWidth="1.4" strokeDasharray="3 7" opacity={stepIndex >= 3 ? 0.8 : 0.15}>
-            <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite" />
-          </line>
-        </svg>
-      </div>
-
-
-      <div className="w-72 text-center relative z-10 -mt-6">
-        <p className="text-cyan-300 text-sm tracking-wide mb-4 h-5">{steps[Math.min(stepIndex, steps.length - 1)]}</p>
-        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-cyan-500 to-cyan-300 transition-all duration-500" style={{ width: `${progress}%`, boxShadow: "0 0 10px rgba(56,215,255,0.7)" }} />
-        </div>
-        <p className="mt-3 text-[10px] tracking-[0.3em] text-slate-500 uppercase">{progress}% Synced</p>
-      </div>
-      <style>{`@keyframes float { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-6px);} }`}</style>
-    </div>
-  );
-}
 
 
 /* ---------------- Packet card (matches RX backend schema + AUTHENTICATED SOS RECEIVED payload) ---------------- */
@@ -1420,8 +1406,6 @@ function Dashboard() {
 export default function OrbitalControlRoom() {
   const [screen, setScreen] = useState("login");
   const { connected } = useGroundStation();
-  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("transition")} connected={connected} />;
-  if (screen === "transition") return <UplinkTransition onComplete={() => setScreen("dashboard")} />;
+  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("dashboard")} connected={connected} />;
   return <Dashboard />;
 }
-
