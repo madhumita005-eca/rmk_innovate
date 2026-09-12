@@ -1424,3 +1424,4 @@ export default function OrbitalControlRoom() {
   if (screen === "transition") return <UplinkTransition onComplete={() => setScreen("dashboard")} />;
   return <Dashboard />;
 }
+
