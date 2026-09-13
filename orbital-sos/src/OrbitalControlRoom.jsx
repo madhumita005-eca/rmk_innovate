@@ -974,15 +974,22 @@ function classifyLinkQuality(rssi) {
 
 function Waveform({ active, rssiHistory = [] }) {
   const [tick, setTick] = useState(0);
-  const [expanded, setExpanded] = useState(false);
   const [hoverIdx, setHoverIdx] = useState(null);
   const [freqModalOpen, setFreqModalOpen] = useState(false);
   const [freqModalLoading, setFreqModalLoading] = useState(false);
+  const [rssiModalOpen, setRssiModalOpen] = useState(false);
+  const [rssiModalLoading, setRssiModalLoading] = useState(false);
 
   const openFreqModal = () => {
     setFreqModalOpen(true);
     setFreqModalLoading(true);
     setTimeout(() => setFreqModalLoading(false), 700);
+  };
+
+  const openRssiModal = () => {
+    setRssiModalOpen(true);
+    setRssiModalLoading(true);
+    setTimeout(() => setRssiModalLoading(false), 700);
   };
 
   useEffect(() => {
@@ -1068,13 +1075,13 @@ function Waveform({ active, rssiHistory = [] }) {
       </button>
 
       <button
-        onClick={() => setExpanded((e) => !e)}
+        onClick={openRssiModal}
         className="flex items-center justify-between text-left w-full group"
       >
         <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1 group-hover:text-cyan-300 transition-colors">
           RSSI History (real packets) — tap for details
         </p>
-        <ChevronRight size={12} className={`text-slate-500 group-hover:text-cyan-300 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight size={12} className="text-slate-500 group-hover:text-cyan-300 transition-colors" />
       </button>
 
       {rssiVals.length < 2 ? (
@@ -1107,42 +1114,7 @@ function Waveform({ active, rssiHistory = [] }) {
         </div>
       )}
 
-      {expanded && stats && quality && (
-        <div className="mt-1 bg-black/25 border border-white/5 rounded-lg p-3 space-y-2 animate-[fadeIn_0.2s_ease-out]">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest">Link Quality</span>
-            <span className={`text-[11px] font-semibold ${quality.color}`}>{quality.label}</span>
-          </div>
-          <p className="text-[10px] text-slate-400 leading-snug">{quality.desc}</p>
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            <div>
-              <p className="text-[9px] text-slate-500 uppercase">Min</p>
-              <p className="text-white text-[11px] font-mono">{stats.min} dBm</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-slate-500 uppercase">Avg</p>
-              <p className="text-white text-[11px] font-mono">{stats.avg.toFixed(1)} dBm</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-slate-500 uppercase">Max</p>
-              <p className="text-white text-[11px] font-mono">{stats.max} dBm</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-1 border-t border-white/5">
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest">Trend ({rssiVals.length} pkts)</span>
-            <span className={`text-[11px] font-medium ${stats.trend === "Improving" ? "text-emerald-400" : stats.trend === "Degrading" ? "text-red-400" : "text-slate-300"}`}>
-              {stats.trend === "Improving" && "↗ "}
-              {stats.trend === "Degrading" && "↘ "}
-              {stats.trend}
-            </span>
-          </div>
-          <p className="text-[9px] text-slate-600 leading-snug pt-1 border-t border-white/5">
-            RSSI (Received Signal Strength Indicator) measures raw signal power in dBm — closer to 0 is stronger.
-            SNR (Signal-to-Noise Ratio) measures how far the signal sits above the noise floor; LoRa can still decode
-            packets even at slightly negative SNR thanks to its spread-spectrum coding.
-          </p>
-        </div>
-      )}
+      {/* Detailed stats now live in the tap-to-open modal below, not inline. */}
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px);} to { opacity: 1; transform: translateY(0);} }`}</style>
 
       {freqModalOpen && (
@@ -1219,6 +1191,76 @@ function Waveform({ active, rssiHistory = [] }) {
                     laboratory prototype; the 868 MHz band and live satellite path are planned future work.
                   </p>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {rssiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setRssiModalOpen(false)}>
+          <div
+            className="bg-[#050f1f] border border-cyan-400/20 rounded-2xl overflow-hidden w-full max-w-sm relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => setRssiModalOpen(false)} className="absolute top-3 right-3 z-10 text-slate-400 hover:text-white transition-colors">
+              <X size={16} />
+            </button>
+
+            {rssiModalLoading ? (
+              <div className="flex flex-col items-center justify-center py-14 gap-3">
+                <Loader2 size={26} className="text-cyan-400 animate-spin" />
+                <p className="text-[11px] text-cyan-300 tracking-widest uppercase animate-pulse">Analyzing RSSI trend...</p>
+              </div>
+            ) : (
+              <div className="animate-[fadeIn_0.25s_ease-out]">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+                  <Signal size={14} className="text-cyan-400" />
+                  <span className="text-cyan-300 text-xs tracking-widest font-semibold">RSSI Trend Analysis</span>
+                </div>
+
+                {stats && quality ? (
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-widest">Link Quality</span>
+                      <span className={`text-[11px] font-semibold ${quality.color}`}>{quality.label}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-snug">{quality.desc}</p>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="bg-black/30 border border-white/5 rounded-lg px-3 py-2 text-center">
+                        <p className="text-[9px] text-slate-500 uppercase">Min</p>
+                        <p className="text-white text-[12px] font-mono">{stats.min} dBm</p>
+                      </div>
+                      <div className="bg-black/30 border border-white/5 rounded-lg px-3 py-2 text-center">
+                        <p className="text-[9px] text-slate-500 uppercase">Avg</p>
+                        <p className="text-white text-[12px] font-mono">{stats.avg.toFixed(1)} dBm</p>
+                      </div>
+                      <div className="bg-black/30 border border-white/5 rounded-lg px-3 py-2 text-center">
+                        <p className="text-[9px] text-slate-500 uppercase">Max</p>
+                        <p className="text-white text-[12px] font-mono">{stats.max} dBm</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-widest">Trend ({rssiVals.length} pkts)</span>
+                      <span className={`text-[11px] font-medium ${stats.trend === "Improving" ? "text-emerald-400" : stats.trend === "Degrading" ? "text-red-400" : "text-slate-300"}`}>
+                        {stats.trend === "Improving" && "↗ "}
+                        {stats.trend === "Degrading" && "↘ "}
+                        {stats.trend}
+                      </span>
+                    </div>
+
+                    <p className="text-[9px] text-slate-600 leading-snug pt-2 border-t border-white/5">
+                      RSSI (Received Signal Strength Indicator) measures raw signal power in dBm — closer to 0 is
+                      stronger. SNR (Signal-to-Noise Ratio) measures how far the signal sits above the noise floor;
+                      LoRa can still decode packets even at slightly negative SNR thanks to its spread-spectrum coding.
+                      This is real data from packets actually received, not simulated.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-[11px] text-slate-500">Not enough packets yet to compute a trend.</div>
+                )}
               </div>
             )}
           </div>
