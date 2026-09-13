@@ -27,20 +27,6 @@ const API_BASE = "http://127.0.0.1:8080";
 const POLL_MS = 1000;
 
 
-/* ---------------- Operator credentials (hardcoded for the team, lab-grade only —
-   these are NOT hashed/salted and should never be reused for anything beyond this
-   console). Login ID is the codename (case-insensitive); each maps to a real name
-   shown in the header once signed in. ---------------- */
-const OPERATORS = {
-  nova:  { codename: "NOVA",  name: "Nivedhitha",  password: "nova#2026" },
-  orion: { codename: "ORION", name: "Karthick",    password: "orion#2026" },
-  vega:  { codename: "VEGA",  name: "Aditya",      password: "vega#2026" },
-  lyra:  { codename: "LYRA",  name: "Karnika",     password: "lyra#2026" },
-  comet: { codename: "COMET", name: "Madhumita",   password: "comet#2026" },
-  atlas: { codename: "ATLAS", name: "Rohith Sai",  password: "atlas#2026" },
-};
-
-
 /* ---------------- Normalize a backend record into our card schema ---------------- */
 function normalize(raw, seq) {
   if (!raw) return null;
@@ -602,19 +588,13 @@ function LinkBadge({ connected }) {
 function LoginScreen({ onSubmit, connected }) {
   const [loginId, setLoginId] = useState("");
   const [pwd, setPwd] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
 
 
   const handle = (e) => {
     e.preventDefault();
-    if (!loginId.trim() || !pwd.trim()) { setError("Enter both a login ID and password."); return; }
-    const operator = OPERATORS[loginId.trim().toLowerCase()];
-    if (!operator || operator.password !== pwd) {
-      setError("Invalid codename or password.");
-      return;
-    }
-    setError("");
-    onSubmit(operator);
+    if (!loginId.trim() || !pwd.trim()) { setError(true); return; }
+    onSubmit();
   };
 
 
@@ -640,7 +620,7 @@ function LoginScreen({ onSubmit, connected }) {
           <label className="block text-[11px] tracking-[0.2em] text-slate-400 mb-2 uppercase">Login ID</label>
           <div className="relative mb-4">
             <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/70" />
-            <input value={loginId} onChange={(e) => { setLoginId(e.target.value); setError(""); }} placeholder="operator codename"
+            <input value={loginId} onChange={(e) => { setLoginId(e.target.value); setError(false); }} placeholder="operator_id"
               className="w-full bg-black/40 border border-cyan-500/20 focus:border-cyan-400/70 outline-none rounded-lg py-3 pl-10 pr-3 text-white tracking-wide placeholder:text-slate-600 transition-colors" />
           </div>
 
@@ -648,10 +628,10 @@ function LoginScreen({ onSubmit, connected }) {
           <label className="block text-[11px] tracking-[0.2em] text-slate-400 mb-2 uppercase">Password</label>
           <div className="relative mb-1">
             <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/70" />
-            <input type="password" value={pwd} onChange={(e) => { setPwd(e.target.value); setError(""); }} placeholder="••••••••"
+            <input type="password" value={pwd} onChange={(e) => { setPwd(e.target.value); setError(false); }} placeholder="••••••••"
               className="w-full bg-black/40 border border-cyan-500/20 focus:border-cyan-400/70 outline-none rounded-lg py-3 pl-10 pr-3 text-white tracking-widest placeholder:text-slate-600 transition-colors" />
           </div>
-          {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+          {error && <p className="text-red-400 text-xs mt-2">Enter both a login ID and password.</p>}
 
 
           <button type="submit" className="mt-6 w-full group relative overflow-hidden rounded-lg py-3 font-medium text-sm tracking-wide text-[#02121f] bg-cyan-400 hover:bg-cyan-300 transition-colors flex items-center justify-center gap-2">
@@ -661,7 +641,7 @@ function LoginScreen({ onSubmit, connected }) {
 
 
           <div className="mt-5 flex items-center justify-between text-[10px] text-slate-500 tracking-wider uppercase">
-            <span className="flex items-center gap-1"><Radio size={11} /> 868.10 MHz</span>
+            <span className="flex items-center gap-1"><Radio size={11} /> 434.0 MHz <span className="text-slate-600">· 868 MHz planned</span></span>
             <span className="flex items-center gap-1"><ShieldCheck size={11} /> AES-256-GCM</span>
           </div>
         </form>
@@ -701,8 +681,8 @@ function GroundStationGlyph({ size = 30, active = true }) {
 function UplinkTransition({ onComplete }) {
   const steps = [
     "Acquiring GPS fix from field device...",
-    "Broadcasting LoRa packet — 868.10 MHz...",
-    "Relaying via satellite uplink...",
+    "Broadcasting LoRa packet — 434.0 MHz (433 MHz-class prototype)...",
+    "SDR reception via bladeRF ground receiver...",
     "Downlinking to ground station...",
     "Decrypting AES-256-GCM payload...",
     "The Rescue Team is On Board!",
@@ -768,13 +748,14 @@ function UplinkTransition({ onComplete }) {
             <div className="absolute inset-0 flex items-center justify-center">
               <OrbitScene size={230} />
             </div>
+            <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] tracking-widest text-slate-600 uppercase whitespace-nowrap">Satellite relay — planned</span>
           </div>
 
           <SignalLink active={stepIndex >= 3} />
 
           <div className="flex flex-col items-center gap-2 w-16 sm:w-20 shrink-0">
             <GroundStationGlyph size={30} active={stepIndex >= 3} />
-            <span className="text-[8px] sm:text-[9px] tracking-widest text-slate-500 uppercase text-center leading-tight">Ground<br />Station</span>
+            <span className="text-[8px] sm:text-[9px] tracking-widest text-slate-500 uppercase text-center leading-tight">bladeRF<br />SDR RX</span>
           </div>
         </div>
 
@@ -816,9 +797,6 @@ function SignalLink({ active }) {
     }} />
   );
 }
-
-
-
 
 
 /* ---------------- Packet card (matches RX backend schema + AUTHENTICATED SOS RECEIVED payload) ---------------- */
@@ -883,7 +861,10 @@ function PacketCard({ alert, onAck, onViewLocation, live = true }) {
       </div>
 
       <div className="px-4 pb-2">
-        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1.5 flex items-center gap-1"><MapPin size={10} /> Location</p>
+        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1.5 flex items-center gap-1">
+          <MapPin size={10} /> Location
+          <span className="text-amber-400/80 normal-case tracking-normal ml-1">(simulated GPS — real module pending)</span>
+        </p>
         <div className="grid grid-cols-4 gap-2">
           {[
             ["Latitude", alert.lat != null ? Number(alert.lat).toFixed(7) : "—"],
@@ -971,26 +952,45 @@ function AckToast({ toasts }) {
 }
 
 
-/* ---------------- Waveform / RSSI panel (link-activity trace + a REAL RSSI trend) ----------------
-   NOTE ON WHAT'S REAL vs STYLISED, based on what the ground-station API actually exposes
-   (/api/latest, /api/alerts returning per-packet JSON with rssi_dbm/snr_db scalars — no
-   raw IQ samples or FFT bins are streamed to the frontend):
-     - "Link Activity" (left) has no real per-sample waveform to draw from, so it stays a
-       lightweight, clearly-labelled stylised burst indicator — it only animates while a
-       packet is actively being processed (`active`), it does not claim to be a captured
-       signal trace, and it carries no numeric axis that could be mistaken for real values.
-     - "RSSI Trend" (right) plots REAL telemetry: the actual `rssi_dbm` values reported for
-       the last several decoded packets, so it moves only when genuine data arrives. A true
-       spectrum/FFT view would need the RX pipeline (GNU Radio) to publish bin data over the
-       API — that's a backend change, not something the frontend can fabricate honestly.
-------------------------------------------------------------------------------------------- */
-function Waveform({ active, history = [] }) {
+/* ---------------- Signal strip: a decorative live-carrier trace (purely for
+   "is a burst arriving right now" motion) plus a REAL RSSI-over-time chart
+   built from actual received packets. A fabricated "power spectrum" isn't
+   something the ground station can measure (it only reports scalar
+   RSSI/SNR per packet, no FFT), so showing fake spectrum peaks risked
+   implying real spectrum analysis. This uses an honest history of the real
+   RSSI values you've actually received instead — accurate, and more useful
+   to an operator watching for a weakening link.
+
+   Interactive layer: clicking the panel expands a real-data breakdown (link
+   quality classification, min/max/avg, trend), and hovering/tapping a point
+   on the RSSI chart shows its exact dBm/SNR and when it was received. ---------------- */
+function classifyLinkQuality(rssi) {
+  if (rssi == null) return { label: "Unknown", color: "text-slate-400", desc: "No signal reading yet." };
+  if (rssi >= -70) return { label: "Excellent", color: "text-emerald-400", desc: "Strong, reliable link — well above the LoRa noise floor." };
+  if (rssi >= -85) return { label: "Good", color: "text-cyan-300", desc: "Comfortable margin; packets should decode reliably." };
+  if (rssi >= -100) return { label: "Fair", color: "text-amber-300", desc: "Getting close to the noise floor — watch for dropped packets." };
+  return { label: "Poor", color: "text-red-400", desc: "Near or below typical LoRa sensitivity — packets may be lost." };
+}
+
+function Waveform({ active, rssiHistory = [] }) {
   const [tick, setTick] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [freqModalOpen, setFreqModalOpen] = useState(false);
+  const [freqModalLoading, setFreqModalLoading] = useState(false);
+
+  const openFreqModal = () => {
+    setFreqModalOpen(true);
+    setFreqModalLoading(true);
+    setTimeout(() => setFreqModalLoading(false), 700);
+  };
+
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 140);
     return () => clearInterval(t);
   }, []);
 
+  // Decorative amplitude trace — just indicates "a burst is arriving now", not real IQ data.
   const timePoints = useMemo(() => {
     const N = 160;
     const pts = [];
@@ -1004,7 +1004,7 @@ function Waveform({ active, history = [] }) {
     return pts;
   }, [tick, active]);
 
-  const w = 320, h = 44;
+  const w = 320, h = 60;
   const linePath = timePoints
     .map((v, i) => {
       const x = (i / (timePoints.length - 1)) * w;
@@ -1013,54 +1013,217 @@ function Waveform({ active, history = [] }) {
     })
     .join(" ");
 
-  // Real RSSI values only (drop nulls), oldest -> newest, capped to what we were given.
-  const pts = history.filter((p) => p && p.rssi != null);
-  const rssiMin = pts.length ? Math.min(...pts.map((p) => p.rssi)) : -120;
-  const rssiMax = pts.length ? Math.max(...pts.map((p) => p.rssi)) : -40;
-  const span = Math.max(1, rssiMax - rssiMin);
-  const hw = 320, hh = 44;
-  const rssiPath = pts.length > 1
-    ? pts
-        .map((p, i) => {
-          const x = (i / (pts.length - 1)) * hw;
-          const t = (p.rssi - rssiMin) / span;
-          const y = hh - t * (hh - 8) - 4;
-          return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-        })
-        .join(" ")
-    : "";
+  // Real RSSI history — oldest to newest, from actual packets received so far.
+  const rw = 320, rh = 44;
+  const points = rssiHistory.filter((p) => p && p.rssi != null);
+  const rssiVals = points.map((p) => p.rssi);
+
+  const stats = useMemo(() => {
+    if (!rssiVals.length) return null;
+    const latest = rssiVals[rssiVals.length - 1];
+    const min = Math.min(...rssiVals);
+    const max = Math.max(...rssiVals);
+    const avg = rssiVals.reduce((s, v) => s + v, 0) / rssiVals.length;
+    let trend = "Stable";
+    if (rssiVals.length >= 4) {
+      const half = Math.floor(rssiVals.length / 2);
+      const firstAvg = rssiVals.slice(0, half).reduce((s, v) => s + v, 0) / half;
+      const secondAvg = rssiVals.slice(half).reduce((s, v) => s + v, 0) / (rssiVals.length - half);
+      if (secondAvg - firstAvg >= 5) trend = "Improving";
+      else if (firstAvg - secondAvg >= 5) trend = "Degrading";
+    }
+    return { latest, min, max, avg, trend };
+  }, [rssiVals]);
+
+  const quality = stats ? classifyLinkQuality(stats.latest) : null;
+
+  const project = (v) => {
+    const min = Math.min(...rssiVals, -110);
+    const max = Math.max(...rssiVals, -40);
+    const norm = (v - min) / Math.max(1, max - min);
+    return rh - norm * (rh - 6) - 3;
+  };
+
+  const rssiPath = useMemo(() => {
+    if (rssiVals.length < 2) return "";
+    return rssiVals
+      .map((v, i) => `${i === 0 ? "M" : "L"}${((i / (rssiVals.length - 1)) * rw).toFixed(1)},${project(v).toFixed(1)}`)
+      .join(" ");
+  }, [rssiVals]);
+
+  const hovered = hoverIdx != null ? points[hoverIdx] : null;
 
   return (
     <div className="flex flex-col gap-2">
-      <div>
-        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1">Link Activity <span className="text-slate-600 normal-case">(indicator, not a captured trace)</span></p>
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-11">
+      <button onClick={openFreqModal} className="text-left w-full group">
+        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1 flex items-center justify-between group-hover:text-cyan-300 transition-colors">
+          <span>Live Carrier — tap for RF details</span>
+          <ChevronRight size={12} className="text-slate-500 group-hover:text-cyan-300 transition-colors" />
+        </p>
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-14">
           <line x1="0" y1={h / 2} x2={w} y2={h / 2} stroke="rgba(103,232,249,0.12)" strokeWidth="1" />
           <path d={linePath} fill="none" stroke="#38d7ff" strokeWidth="1.3"
             style={{ filter: "drop-shadow(0 0 4px rgba(56,215,255,0.65))" }} />
         </svg>
-      </div>
-      <div>
-        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1 flex items-center justify-between">
-          <span>RSSI Trend · last {pts.length} pkt{pts.length === 1 ? "" : "s"} (real telemetry)</span>
-          {pts.length > 0 && <span className="text-slate-600 normal-case tracking-normal font-mono">{rssiMin}…{rssiMax} dBm</span>}
+      </button>
+
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center justify-between text-left w-full group"
+      >
+        <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-1 group-hover:text-cyan-300 transition-colors">
+          RSSI History (real packets) — tap for details
         </p>
-        {pts.length > 1 ? (
-          <svg viewBox={`0 0 ${hw} ${hh}`} className="w-full h-11">
-            <line x1="0" y1={hh - 4} x2={hw} y2={hh - 4} stroke="rgba(103,232,249,0.12)" strokeWidth="1" />
-            <path d={rssiPath} fill="none" stroke="#38d7ff" strokeWidth="1.6"
-              style={{ filter: "drop-shadow(0 0 4px rgba(56,215,255,0.55))" }} />
-            {pts.map((p, i) => {
-              const x = (i / (pts.length - 1)) * hw;
-              const t = (p.rssi - rssiMin) / span;
-              const y = hh - t * (hh - 8) - 4;
-              return <circle key={i} cx={x} cy={y} r={2} fill="#67e8f9" />;
+        <ChevronRight size={12} className={`text-slate-500 group-hover:text-cyan-300 transition-transform ${expanded ? "rotate-90" : ""}`} />
+      </button>
+
+      {rssiVals.length < 2 ? (
+        <div className="h-11 flex items-center text-[10px] text-slate-600">Waiting for more packets to plot a trend...</div>
+      ) : (
+        <div className="relative">
+          <svg viewBox={`0 0 ${rw} ${rh}`} className="w-full h-11" onMouseLeave={() => setHoverIdx(null)}>
+            <line x1="0" y1={rh - 3} x2={rw} y2={rh - 3} stroke="rgba(103,232,249,0.12)" strokeWidth="1" />
+            <path d={rssiPath} fill="none" stroke="#22d3ee" strokeWidth="1.6"
+              style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.6))" }} />
+            {rssiVals.map((v, i) => {
+              const x = (i / (rssiVals.length - 1)) * rw;
+              const y = project(v);
+              const isHover = hoverIdx === i;
+              return (
+                <circle key={i} cx={x} cy={y} r={isHover ? 3.4 : 1.6} fill={isHover ? "#fff" : "#67e8f9"}
+                  className="cursor-pointer transition-all"
+                  onMouseEnter={() => setHoverIdx(i)}
+                  onClick={() => setHoverIdx(i)}
+                />
+              );
             })}
           </svg>
-        ) : (
-          <p className="text-[10px] text-slate-600 h-11 flex items-center">Waiting for enough packets to plot a real RSSI trend...</p>
-        )}
-      </div>
+          {hovered && (
+            <div className="absolute top-0 right-0 bg-[#0a1626] border border-cyan-400/30 rounded-lg px-2.5 py-1.5 text-[10px] shadow-lg pointer-events-none">
+              <p className="text-cyan-300 font-mono">{hovered.rssi} dBm{hovered.snr != null ? ` · ${hovered.snr} dB SNR` : ""}</p>
+              <p className="text-slate-500">{new Date(hovered.receivedAt).toLocaleTimeString()}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {expanded && stats && quality && (
+        <div className="mt-1 bg-black/25 border border-white/5 rounded-lg p-3 space-y-2 animate-[fadeIn_0.2s_ease-out]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500 uppercase tracking-widest">Link Quality</span>
+            <span className={`text-[11px] font-semibold ${quality.color}`}>{quality.label}</span>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-snug">{quality.desc}</p>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase">Min</p>
+              <p className="text-white text-[11px] font-mono">{stats.min} dBm</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase">Avg</p>
+              <p className="text-white text-[11px] font-mono">{stats.avg.toFixed(1)} dBm</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase">Max</p>
+              <p className="text-white text-[11px] font-mono">{stats.max} dBm</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-1 border-t border-white/5">
+            <span className="text-[10px] text-slate-500 uppercase tracking-widest">Trend ({rssiVals.length} pkts)</span>
+            <span className={`text-[11px] font-medium ${stats.trend === "Improving" ? "text-emerald-400" : stats.trend === "Degrading" ? "text-red-400" : "text-slate-300"}`}>
+              {stats.trend === "Improving" && "↗ "}
+              {stats.trend === "Degrading" && "↘ "}
+              {stats.trend}
+            </span>
+          </div>
+          <p className="text-[9px] text-slate-600 leading-snug pt-1 border-t border-white/5">
+            RSSI (Received Signal Strength Indicator) measures raw signal power in dBm — closer to 0 is stronger.
+            SNR (Signal-to-Noise Ratio) measures how far the signal sits above the noise floor; LoRa can still decode
+            packets even at slightly negative SNR thanks to its spread-spectrum coding.
+          </p>
+        </div>
+      )}
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px);} to { opacity: 1; transform: translateY(0);} }`}</style>
+
+      {freqModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setFreqModalOpen(false)}>
+          <div
+            className="bg-[#050f1f] border border-cyan-400/20 rounded-2xl overflow-hidden w-full max-w-sm relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => setFreqModalOpen(false)} className="absolute top-3 right-3 z-10 text-slate-400 hover:text-white transition-colors">
+              <X size={16} />
+            </button>
+
+            {freqModalLoading ? (
+              <div className="flex flex-col items-center justify-center py-14 gap-3">
+                <Loader2 size={26} className="text-cyan-400 animate-spin" />
+                <p className="text-[11px] text-cyan-300 tracking-widest uppercase animate-pulse">Analyzing RF link...</p>
+              </div>
+            ) : (
+              <div className="animate-[fadeIn_0.25s_ease-out]">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+                  <Radio size={14} className="text-cyan-400" />
+                  <span className="text-cyan-300 text-xs tracking-widest font-semibold">RF Link Analysis</span>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  <div>
+                    <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-2">RF Configuration</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        ["Frequency", "434.0 MHz"],
+                        ["Band Plan", "868 MHz planned"],
+                        ["Bandwidth", "125 kHz"],
+                        ["Spreading Factor", "SF9"],
+                        ["Coding Rate", "4/7"],
+                        ["Sync Word", "0x12"],
+                      ].map(([label, value], i) => (
+                        <div key={i} className="bg-black/30 border border-white/5 rounded-lg px-3 py-2">
+                          <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-0.5">{label}</p>
+                          <p className="text-sm text-white font-mono">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[9px] tracking-widest text-slate-500 uppercase mb-2">Current Link Status</p>
+                    {quality && stats ? (
+                      <div className="bg-black/30 border border-white/5 rounded-lg px-3 py-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Quality</span>
+                          <span className={`text-[11px] font-semibold ${quality.color}`}>{quality.label}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Latest RSSI</span>
+                          <span className="text-[11px] text-white font-mono">{stats.latest} dBm</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Trend</span>
+                          <span className={`text-[11px] font-medium ${stats.trend === "Improving" ? "text-emerald-400" : stats.trend === "Degrading" ? "text-red-400" : "text-slate-300"}`}>{stats.trend}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">Burst Detected</span>
+                          <span className={`text-[11px] font-medium ${active ? "text-emerald-400" : "text-slate-500"}`}>{active ? "Yes, active now" : "Idle"}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">No packets received yet for this device.</p>
+                    )}
+                  </div>
+
+                  <p className="text-[9px] text-slate-600 leading-snug pt-2 border-t border-white/5">
+                    The waveform above is a decorative visualization of burst timing (not captured IQ/spectrum data — the
+                    ground station only reports scalar RSSI/SNR per packet). RF configuration values reflect the current
+                    laboratory prototype; the 868 MHz band and live satellite path are planned future work.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1076,43 +1239,31 @@ function FlyTo({ target, zoom }) {
 }
 
 
-/* Battery-driven urgency, red-scale only (acknowledged pins turn green elsewhere and are
-   never affected by this). A fading beacon is more time-critical to reach, so lower
-   battery reads as a deeper, more saturated red with a stronger pulse — not a different
-   hue, just more intense along the same red scale so "red = pending SOS" stays consistent. */
-function batteryRedShade(battery) {
-  if (battery == null) return "#f87171";       // unknown battery — default (healthy-looking) red
-  if (battery <= 20) return "#b91c1c";          // critical — deep, saturated red
-  if (battery <= 50) return "#ef4444";          // low — mid red
-  return "#f87171";                             // healthy — lighter red
-}
-function batteryIntensity(battery) {
-  if (battery == null) return 1;
-  if (battery <= 20) return 1.35;               // bigger, brighter pulse ring
-  if (battery <= 50) return 1.15;
-  return 1;
-}
-
-
 /* Sharper, higher-contrast marker: pin silhouette + a clearly visible double
    radar-pulse ring + status glyph. Acknowledged pins get a check-mark glyph
-   and switch to solid green with no pulse (resolved); pending pins keep a
-   bold, unmistakable red pulsing radar ring so they can't be missed on the map —
-   and that ring's shade/size now scales with the device's reported battery. */
-function pinIcon(color, { pulse = false, label, acknowledged = false, intensity = 1 } = {}) {
+   and switch to solid green with no pulse (resolved). Pending pins stay red,
+   but both the shade and the pulse intensity scale with the device's battery
+   level — a low-battery beacon reads as more urgent (brighter red, faster/
+   bigger pulse) than a healthy one (softer red, calmer pulse), so the map
+   communicates device health at a glance without opening anything. */
+function batteryToUrgency(battery) {
+  if (battery == null) return { color: "#f87171", pulseScale: 2.6, pulseDuration: "1.5s" };
+  if (battery <= 20) return { color: "#ff1f3d", pulseScale: 3.2, pulseDuration: "1.0s" };
+  if (battery <= 50) return { color: "#f8474f", pulseScale: 2.8, pulseDuration: "1.3s" };
+  return { color: "#fca5a5", pulseScale: 2.2, pulseDuration: "1.8s" };
+}
+
+function pinIcon(color, { pulse = false, label, acknowledged = false, pulseScale = 2.6, pulseDuration = "1.5s" } = {}) {
   const glyph = acknowledged
     ? `<path d="M12.5 17.2l2.9 2.9 6.1-6.3" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
     : `<rect x="16" y="10.5" width="2.2" height="8" rx="1.1" fill="#ffffff"/><circle cx="17.1" cy="21.6" r="1.35" fill="#ffffff"/>`;
-  const ringSize = Math.round(30 * intensity);
-  const ringTop = Math.round(9 - (ringSize - 30) / 2);
-  const glowPx = Math.round(6 * intensity);
   const html = `
     <div style="position:relative;width:46px;height:56px;display:flex;align-items:center;justify-content:center;transform:translate(-4px,-10px);">
       ${pulse ? `
-        <div style="position:absolute;top:${ringTop}px;width:${ringSize}px;height:${ringSize}px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out infinite;"></div>
-        <div style="position:absolute;top:${ringTop}px;width:${ringSize}px;height:${ringSize}px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse 1.5s ease-out 0.5s infinite;"></div>
+        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse ${pulseDuration} ease-out infinite;--pulse-scale:${pulseScale};"></div>
+        <div style="position:absolute;top:9px;width:30px;height:30px;border-radius:50%;background:${color}55;border:2px solid ${color};animation:pinPulse ${pulseDuration} ease-out 0.5s infinite;--pulse-scale:${pulseScale};"></div>
       ` : ""}
-      <svg width="40" height="50" viewBox="0 0 34 44" style="position:relative;z-index:2;filter:drop-shadow(0 3px ${glowPx}px rgba(0,0,0,0.7)) drop-shadow(0 0 ${glowPx}px ${color}aa);">
+      <svg width="40" height="50" viewBox="0 0 34 44" style="position:relative;z-index:2;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.7));">
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
           fill="${color}" stroke="#0a1626" stroke-width="2.2"/>
         <path d="M17 1C8.16 1 1 8.16 1 17c0 12 16 26 16 26s16-14 16-26C33 8.16 25.84 1 17 1z"
@@ -1123,7 +1274,7 @@ function pinIcon(color, { pulse = false, label, acknowledged = false, intensity 
       </svg>
       ${label ? `<div style="position:absolute;top:-6px;z-index:3;background:#0a1626;border:1.5px solid ${color};color:#fff;font:700 9px monospace;padding:1.5px 5px;border-radius:5px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.6);">${label}</div>` : ""}
     </div>
-    <style>@keyframes pinPulse { 0% { transform: scale(0.6); opacity: 0.95;} 100% { transform: scale(2.6); opacity: 0;} }</style>
+    <style>@keyframes pinPulse { 0% { transform: scale(0.6); opacity: 0.95;} 100% { transform: scale(var(--pulse-scale, 2.6)); opacity: 0;} }</style>
   `;
   return L.divIcon({ className: "", html, iconSize: [46, 56], iconAnchor: [23, 50], popupAnchor: [0, -44] });
 }
@@ -1140,11 +1291,17 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, onAck, height = "100
         <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {withGps.map((p) => {
           const acked = p.status === "acknowledged";
-          const color = acked ? "#34d399" : batteryRedShade(p.battery);
-          const label = p.battery != null ? `${p.deviceId} · ${p.battery}%` : `${p.deviceId}`;
+          const urgency = batteryToUrgency(p.battery);
+          const pinColor = acked ? "#34d399" : urgency.color;
           return (
             <Marker key={p.id} position={[p.lat, p.lon]}
-              icon={pinIcon(color, { pulse: !acked, label, acknowledged: acked, intensity: acked ? 1 : batteryIntensity(p.battery) })}
+              icon={pinIcon(pinColor, {
+                pulse: !acked,
+                label: p.deviceId,
+                acknowledged: acked,
+                pulseScale: urgency.pulseScale,
+                pulseDuration: urgency.pulseDuration,
+              })}
               eventHandlers={{ click: () => onPinClick && onPinClick(p) }}>
               {/* Clicking the pin only opens this info box — the marker itself never moves. */}
               <Popup autoPan={false} closeButton={true} offset={[0, -36]} minWidth={230}>
@@ -1155,9 +1312,14 @@ function RealMap({ pins = [], focus, zoom = 12, onPinClick, onAck, height = "100
                       {acked ? "Acknowledged" : "Pending"}
                     </span>
                   </div>
-                  <div className="mb-0.5">Lat/Lon: {Number(p.lat).toFixed(6)}, {Number(p.lon).toFixed(6)}</div>
+                  <div className="mb-0.5">Lat/Lon: {Number(p.lat).toFixed(6)}, {Number(p.lon).toFixed(6)} <span className="text-amber-400/80">(simulated)</span></div>
                   {p.altitude != null && <div className="mb-0.5">Altitude: {p.altitude} m</div>}
-                  {p.battery != null && <div className="mb-0.5">Battery: {p.battery}%{!acked && p.battery <= 20 ? " — critical, prioritize" : ""}</div>}
+                  {p.battery != null && (
+                    <div className="mb-0.5">
+                      Battery: {p.battery}%
+                      {!acked && p.battery <= 20 && <span className="text-red-400 font-semibold"> · LOW</span>}
+                    </div>
+                  )}
                   <div className="text-slate-500 mb-2">{p.alertType || "SOS"} · Msg #{p.messageId ?? p.sequenceNo ?? "—"}</div>
                   {!acked && onAck && (
                     <button
@@ -1227,8 +1389,11 @@ function LocationView({ alert, onBack }) {
           </div>
           {/* Static fix readout — no scrubber/playback, just the current values for this device. */}
           <div className="bg-white/[0.03] border border-cyan-400/15 rounded-2xl p-4">
-            <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase mb-3">
-              <Clock size={14} /> Live Location Feed
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase">
+                <Clock size={14} /> Live Location Feed
+              </div>
+              <span className="text-[9px] text-amber-400/80 tracking-wide uppercase">Simulated GPS</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-[11px]">
               <div className="bg-black/30 rounded-lg px-2.5 py-2">
@@ -1253,7 +1418,7 @@ function LocationView({ alert, onBack }) {
 
 
 /* ---------------- Smart automatic alerts panel ---------------- */
-function SystemAlertsPanel({ alerts }) {
+function SystemAlertsPanel({ alerts, onSelectDevice }) {
   const styles = {
     "signal-drop": { icon: <Signal size={13} className="text-red-400" />, cls: "border-red-400/30 text-red-300 bg-red-400/5" },
     "signal-restored": { icon: <Signal size={13} className="text-emerald-400" />, cls: "border-emerald-400/30 text-emerald-300 bg-emerald-400/5" },
@@ -1274,13 +1439,18 @@ function SystemAlertsPanel({ alerts }) {
           {alerts.map((sa) => {
             const s = styles[sa.type] || styles["not-moving"];
             return (
-              <div key={sa.id} className={`flex items-start gap-2 text-[11px] rounded-lg border px-2.5 py-2 ${s.cls}`}>
+              <button
+                key={sa.id}
+                onClick={() => onSelectDevice && onSelectDevice(sa.deviceId)}
+                className={`w-full text-left flex items-start gap-2 text-[11px] rounded-lg border px-2.5 py-2 transition-colors hover:brightness-125 ${s.cls}`}
+              >
                 {s.icon}
                 <div className="flex-1">
                   <p className="leading-snug">{sa.message}</p>
                   <p className="text-[9px] text-slate-500 mt-0.5">Device {sa.deviceId} · {new Date(sa.at).toLocaleTimeString()}</p>
                 </div>
-              </div>
+                <ChevronRight size={13} className="text-slate-500 shrink-0 mt-0.5" />
+              </button>
             );
           })}
         </div>
@@ -1291,7 +1461,7 @@ function SystemAlertsPanel({ alerts }) {
 
 
 /* ---------------- Device activity summary (speed / direction / distance) ---------------- */
-function DeviceActivitySummary({ metrics, deviceId, deviceName }) {
+function DeviceActivitySummary({ metrics, deviceId, deviceName, onTakeAction }) {
   if (!metrics) {
     return (
       <div className="bg-white/[0.03] border border-cyan-400/15 rounded-2xl p-4">
@@ -1317,7 +1487,10 @@ function DeviceActivitySummary({ metrics, deviceId, deviceName }) {
           {isActive ? "Active" : "Idle"}
         </span>
       </div>
-      <p className="text-[10px] text-slate-500 mb-3">Device {deviceId} · {deviceName}</p>
+      <p className="text-[10px] text-slate-500 mb-2">Device {deviceId} · {deviceName}</p>
+      <div className="flex items-center gap-1 mb-3 text-[9px] text-amber-400/80">
+        <AlertTriangle size={10} /> GPS currently simulated — speed/direction/distance below are illustrative until a real GPS module is integrated
+      </div>
       <div className="grid grid-cols-2 gap-2 text-[11px]">
         <div className="bg-black/30 rounded-lg px-2.5 py-2">
           <p className="text-[9px] text-slate-500 uppercase mb-0.5">Location</p>
@@ -1340,6 +1513,19 @@ function DeviceActivitySummary({ metrics, deviceId, deviceName }) {
           <p className="text-white font-mono">{metrics.totalDistanceKm.toFixed(2)} km</p>
         </div>
       </div>
+      {!isActive && (
+        <div className="mt-3 flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-400/10 border border-amber-400/30 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle size={11} /> Immediate action needed — device has gone quiet
+        </div>
+      )}
+      {onTakeAction && (
+        <button
+          onClick={() => onTakeAction(deviceId)}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 text-[11px] font-medium py-2 rounded-lg bg-cyan-400 text-[#02121f] hover:bg-cyan-300 transition-colors"
+        >
+          <Eye size={13} /> Take Action
+        </button>
+      )}
     </div>
   );
 }
@@ -1377,7 +1563,7 @@ function NavTransitionOverlay({ target }) {
 }
 
 
-function Dashboard({ operator }) {
+function Dashboard() {
   const { connected, latest, history } = useGroundStation();
   const fallbackAlerts = useFallbackAlerts(!connected);
   const [localAlerts, setLocalAlerts] = useState({}); // id -> {status, ackAt}
@@ -1426,14 +1612,16 @@ function Dashboard({ operator }) {
   const activeTrack = activeDeviceId != null ? (deviceTracks[activeDeviceId] || []) : [];
   const activeMetrics = computeDeviceMetrics(activeTrack);
 
+  // Real RSSI history for the active device, oldest -> newest, from actual received packets.
+  const rssiHistory = useMemo(() => {
+    return alerts
+      .filter((a) => a.deviceId === activeDeviceId && a.rssi != null)
+      .slice()
+      .sort((a, b) => a.receivedAt - b.receivedAt)
+      .slice(-30)
+      .map((a) => ({ rssi: a.rssi, snr: a.snr, receivedAt: a.receivedAt }));
+  }, [alerts, activeDeviceId]);
 
-  // Real RSSI history for the "Incoming Signal Strength" panel — the last several
-  // decoded packets (any device), oldest to newest, so the trend line moves only
-  // when genuine telemetry arrives.
-  const recentSignal = useMemo(
-    () => [...alerts].sort((a, b) => a.receivedAt - b.receivedAt).slice(-20),
-    [alerts]
-  );
 
 
   const filtered = useMemo(() => {
@@ -1462,6 +1650,16 @@ function Dashboard({ operator }) {
     }, 1500);
   };
 
+  // Used by both Smart Alerts (click an anomaly) and Device Activity's "Take
+  // Action" button — jumps straight to that device's latest packet in the
+  // same details modal used everywhere else (Acknowledge + View Location).
+  const takeActionOnDevice = (deviceId) => {
+    const target = alerts
+      .filter((a) => String(a.deviceId) === String(deviceId))
+      .sort((a, b) => b.receivedAt - a.receivedAt)[0];
+    if (target) setModalAlert(target);
+  };
+
 
   const counts = {
     all: alerts.length,
@@ -1484,14 +1682,8 @@ function Dashboard({ operator }) {
           </div>
         </div>
         <div className="flex items-center gap-6 text-xs text-slate-400">
-          {operator && (
-            <div className="flex items-center gap-1.5 text-[11px] text-cyan-200">
-              <User size={12} className="text-cyan-400" />
-              {operator.name} <span className="text-slate-500 font-mono">// {operator.codename}</span>
-            </div>
-          )}
           <LinkBadge connected={connected} />
-          <div className="flex items-center gap-1.5"><Globe2 size={13} className="text-cyan-400" /> 868.10 MHz</div>
+          <div className="flex items-center gap-1.5"><Globe2 size={13} className="text-cyan-400" /> 434.0 MHz <span className="text-slate-600">· 868 planned</span></div>
           <div className="flex flex-col items-end leading-tight">
             <span className="font-mono text-cyan-200">{clock.toLocaleTimeString()}</span>
             <span className="font-mono text-[10px] text-slate-500">
@@ -1528,7 +1720,7 @@ function Dashboard({ operator }) {
             <div className="flex items-center gap-2 text-cyan-300 text-xs tracking-widest uppercase mb-3">
               <Signal size={14} /> Incoming Signal Strength
             </div>
-            <Waveform active={signalActive || !connected} history={recentSignal} />
+            <Waveform active={signalActive || !connected} rssiHistory={rssiHistory} />
             <div className="flex justify-between mt-2 text-[10px] text-slate-500 font-mono">
               <span>RSSI {displayLatest?.rssi ?? "--"} dBm</span>
               <span>SNR {displayLatest?.snr ?? "--"} dB</span>
@@ -1543,10 +1735,10 @@ function Dashboard({ operator }) {
           </div>
 
 
-          <SystemAlertsPanel alerts={systemAlerts} />
+          <SystemAlertsPanel alerts={systemAlerts} onSelectDevice={takeActionOnDevice} />
 
 
-          <DeviceActivitySummary metrics={activeMetrics} deviceId={activeDeviceId ?? "—"} deviceName={activeDeviceName} />
+          <DeviceActivitySummary metrics={activeMetrics} deviceId={activeDeviceId ?? "—"} deviceName={activeDeviceName} onTakeAction={takeActionOnDevice} />
         </div>
 
 
@@ -1637,9 +1829,8 @@ function Dashboard({ operator }) {
 /* ---------------- Root ---------------- */
 export default function OrbitalControlRoom() {
   const [screen, setScreen] = useState("login");
-  const [operator, setOperator] = useState(null);
   const { connected } = useGroundStation();
-  if (screen === "login") return <LoginScreen onSubmit={(op) => { setOperator(op); setScreen("transition"); }} connected={connected} />;
+  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("transition")} connected={connected} />;
   if (screen === "transition") return <UplinkTransition onComplete={() => setScreen("dashboard")} />;
-  return <Dashboard operator={operator} />;
+  return <Dashboard />;
 }
