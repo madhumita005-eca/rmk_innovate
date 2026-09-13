@@ -27,6 +27,20 @@ const API_BASE = "http://127.0.0.1:8080";
 const POLL_MS = 1000;
 
 
+/* ---------------- Operator credentials (hardcoded for the team, lab-grade only —
+   these are NOT hashed/salted and should never be reused for anything beyond this
+   console). Login ID is the codename (case-insensitive); each maps to a real name
+   shown in the header once signed in. ---------------- */
+const OPERATORS = {
+  nova:  { codename: "NOVA",  name: "Nivedhitha",  password: "nova#2026" },
+  orion: { codename: "ORION", name: "Karthick",    password: "orion#2026" },
+  vega:  { codename: "VEGA",  name: "Aditya",      password: "vega#2026" },
+  lyra:  { codename: "LYRA",  name: "Karnika",     password: "lyra#2026" },
+  comet: { codename: "COMET", name: "Madhumita",   password: "comet#2026" },
+  atlas: { codename: "ATLAS", name: "Rohith Sai",  password: "atlas#2026" },
+};
+
+
 /* ---------------- Normalize a backend record into our card schema ---------------- */
 function normalize(raw, seq) {
   if (!raw) return null;
@@ -588,13 +602,19 @@ function LinkBadge({ connected }) {
 function LoginScreen({ onSubmit, connected }) {
   const [loginId, setLoginId] = useState("");
   const [pwd, setPwd] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
 
   const handle = (e) => {
     e.preventDefault();
-    if (!loginId.trim() || !pwd.trim()) { setError(true); return; }
-    onSubmit();
+    if (!loginId.trim() || !pwd.trim()) { setError("Enter both a login ID and password."); return; }
+    const operator = OPERATORS[loginId.trim().toLowerCase()];
+    if (!operator || operator.password !== pwd) {
+      setError("Invalid codename or password.");
+      return;
+    }
+    setError("");
+    onSubmit(operator);
   };
 
 
@@ -620,7 +640,7 @@ function LoginScreen({ onSubmit, connected }) {
           <label className="block text-[11px] tracking-[0.2em] text-slate-400 mb-2 uppercase">Login ID</label>
           <div className="relative mb-4">
             <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/70" />
-            <input value={loginId} onChange={(e) => { setLoginId(e.target.value); setError(false); }} placeholder="operator_id"
+            <input value={loginId} onChange={(e) => { setLoginId(e.target.value); setError(""); }} placeholder="operator codename"
               className="w-full bg-black/40 border border-cyan-500/20 focus:border-cyan-400/70 outline-none rounded-lg py-3 pl-10 pr-3 text-white tracking-wide placeholder:text-slate-600 transition-colors" />
           </div>
 
@@ -628,10 +648,10 @@ function LoginScreen({ onSubmit, connected }) {
           <label className="block text-[11px] tracking-[0.2em] text-slate-400 mb-2 uppercase">Password</label>
           <div className="relative mb-1">
             <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500/70" />
-            <input type="password" value={pwd} onChange={(e) => { setPwd(e.target.value); setError(false); }} placeholder="••••••••"
+            <input type="password" value={pwd} onChange={(e) => { setPwd(e.target.value); setError(""); }} placeholder="••••••••"
               className="w-full bg-black/40 border border-cyan-500/20 focus:border-cyan-400/70 outline-none rounded-lg py-3 pl-10 pr-3 text-white tracking-widest placeholder:text-slate-600 transition-colors" />
           </div>
-          {error && <p className="text-red-400 text-xs mt-2">Enter both a login ID and password.</p>}
+          {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
 
 
           <button type="submit" className="mt-6 w-full group relative overflow-hidden rounded-lg py-3 font-medium text-sm tracking-wide text-[#02121f] bg-cyan-400 hover:bg-cyan-300 transition-colors flex items-center justify-center gap-2">
@@ -1357,7 +1377,7 @@ function NavTransitionOverlay({ target }) {
 }
 
 
-function Dashboard() {
+function Dashboard({ operator }) {
   const { connected, latest, history } = useGroundStation();
   const fallbackAlerts = useFallbackAlerts(!connected);
   const [localAlerts, setLocalAlerts] = useState({}); // id -> {status, ackAt}
@@ -1464,6 +1484,12 @@ function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-6 text-xs text-slate-400">
+          {operator && (
+            <div className="flex items-center gap-1.5 text-[11px] text-cyan-200">
+              <User size={12} className="text-cyan-400" />
+              {operator.name} <span className="text-slate-500 font-mono">// {operator.codename}</span>
+            </div>
+          )}
           <LinkBadge connected={connected} />
           <div className="flex items-center gap-1.5"><Globe2 size={13} className="text-cyan-400" /> 868.10 MHz</div>
           <div className="flex flex-col items-end leading-tight">
@@ -1611,8 +1637,9 @@ function Dashboard() {
 /* ---------------- Root ---------------- */
 export default function OrbitalControlRoom() {
   const [screen, setScreen] = useState("login");
+  const [operator, setOperator] = useState(null);
   const { connected } = useGroundStation();
-  if (screen === "login") return <LoginScreen onSubmit={() => setScreen("transition")} connected={connected} />;
+  if (screen === "login") return <LoginScreen onSubmit={(op) => { setOperator(op); setScreen("transition"); }} connected={connected} />;
   if (screen === "transition") return <UplinkTransition onComplete={() => setScreen("dashboard")} />;
-  return <Dashboard />;
+  return <Dashboard operator={operator} />;
 }
